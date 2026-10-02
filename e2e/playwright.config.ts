@@ -26,8 +26,12 @@ export default defineConfig({
     locale: 'en-US',
     trace: 'retain-on-failure',
   },
-  // An upright phone: the table's hardest layout, and the shape most strangers will open it in.
-  projects: [{ name: 'phone', use: { ...devices['Pixel 7'] } }],
+  // An upright phone: the table's hardest layout, and the shape most strangers will open it in. At
+  // a pixel ratio of 1: the suite tests behaviour, not pixels, and a CI runner has no GPU — WebGL
+  // drawn in software at the Pixel's 2.625 managed 1–3 frames a second there, and under reduced
+  // motion every cue waits for a frame, so a hand took 6–20 s (on a laptop, throttled 4×: 35 fps at
+  // 2.625, 120 at 1).
+  projects: [{ name: 'phone', use: { ...devices['Pixel 7'], deviceScaleFactor: 1 } }],
   ...(live
     ? {}
     : {

@@ -329,6 +329,11 @@ writing:
   50–90 ms long tasks with almost no JS in them; it measures the machine, not the table. A real
   device, through remote debugging against the live link, needs a phone in hand, which no script in
   this repository can stand in for. Open after P1 — the live link is up; the measurement is not.
+- **The table redraws when nothing moves.** Pixi's ticker renders every frame, idle or not: on a
+  laptop throttled 4× the page draws 35 fps at a phone's 2.625 pixel ratio and 120 at 1, and a CI
+  runner drawing WebGL in software managed 1–3 — which is why the E2E suite runs at a pixel ratio
+  of 1. A phone with a GPU copes, but an idle table should cost no frames: render on a change or a
+  playing script, and stop the ticker otherwise. Open after P1.
 
 ## Rules
 
