@@ -1,6 +1,12 @@
 /**
- * @blackjack/server — sessions, wallets, seeds, idempotency, persistence, `/fair`.
+ * @blackjack/server — sessions, wallets, seeds, idempotency, persistence, `/fair` (ROADMAP S3).
  *
- * Empty until **S3** (ROADMAP.md). The dependency rules already police it.
+ * `main.ts` is the process; `createServer` is everything else, so the tests build the very same
+ * server on a random port.
  */
-export {};
+export { createServer, type Server, type ServerDeps } from './app.js';
+export { Table, type Answer, type TableDeps } from './table.js';
+export { readConfig, BootError, DEFAULT_GAME, type ServerConfig } from './config.js';
+export { memoryStore } from './store/memory.js';
+export { sqliteStore } from './store/sqlite.js';
+export type { Store, SessionRow, RoundRow, ReplyRow, Change } from './store/store.js';

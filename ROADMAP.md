@@ -28,7 +28,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **S0** | Workspace, strict TS, boundary lint, purity tests, CI | — | ✅ (landed 2026-10-02) |
 | **S1** | `protocol` · `money` · `cards` · `fair` — the contracts everything reads | S0 | ✅ (landed 2026-10-02) |
 | **S2** | `engine` — the round machine, pure and headless | S1 | ✅ (landed 2026-10-02) |
-| **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ☐ |
+| **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ✅ (landed 2026-10-02) |
 | **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ☐ |
 | **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ☐ |
 | **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ☐ |
@@ -156,26 +156,47 @@ every snapshot equal to the fold of its events, and every `allowed` equal to the
 
 _2–3 days._
 
-- [ ] `apps/server`: Fastify, `/api/session`, `/api/deal`, `/api/act`, `/api/round`,
+- [x] `apps/server`: Fastify, `/api/session`, `/api/deal`, `/api/act`, `/api/round`,
       `/api/history`, `/fair/rounds/:roundId`, `/health`, `/ready`. Every body parsed with its
-      schema; every reply too, in development.
-- [ ] Sessions and wallets: a bearer token per player, a fresh demo wallet per new token.
-- [ ] Seeds: the next round's server seed drawn from a CSPRNG at session open and at every
+      schema; every reply too, in development. The work is in `Table`, which knows no HTTP;
+      `http.ts` is a line per route. Fastify's own refusals and anything thrown come back in §6's
+      shape — a throw as `INTERNAL`, its message kept off the wire.
+- [x] Sessions and wallets: a bearer token per player, a fresh demo wallet per new token.
+- [x] Seeds: the next round's server seed drawn from a CSPRNG at session open and at every
       settlement, persisted with the session; `COMMIT_MISMATCH` for any other commit.
-- [ ] Idempotency and versions in the pinned order — session → `actionId` replay → `seq` → rules
+- [x] Idempotency and versions in the pinned order — session → `actionId` replay → `seq` → rules
       ([`docs/protocol.md`](docs/protocol.md) §7). Stored replies for the open round and the last
-      settled one.
-- [ ] Persistence behind one interface, two implementations — in memory (tests) and SQLite (WAL,
+      settled one. **Diverged:** only accepted requests are stored — a refusal changed nothing, and
+      its retry is answered afresh. A decision naming another round than the open one is
+      `STALE_SEQ`; with none open, `NO_OPEN_ROUND` carries the round that last settled.
+- [x] Persistence behind one interface, two implementations — in memory (tests) and SQLite (WAL,
       `synchronous=FULL`). Round state, events, the reply and the wallet in **one transaction before
       the reply**. A restart resumes every open round exactly, its shoe regenerated from its seeds.
-- [ ] Never a face-down card or an unrevealed seed in a reply, an error or a log line — asserted by a
+      **Diverged:** a round is stored as its *inputs* — rules, seeds, stake, opening balance,
+      decisions — and every request rebuilds its state through `engine.replay`. Resume is not a
+      separate path, and the wallet is checked against the replayed balance on every load. Each
+      request is synchronous from first read to commit, so two tabs are serialised by the event
+      loop with no lock. One contract suite runs against both stores.
+- [x] Never a face-down card or an unrevealed seed in a reply, an error or a log line — asserted by a
       test that scans every reply and log record of 10,000 hands for the hole card's code and the
-      seed's hex before their reveal.
-- [ ] The dev surface (`BJ_DEV=on`): `forceShoe`, and a forced round marked as such end to end.
+      seed's hex before their reveal. The card check is structural: every card code in the raw body
+      must sit in a `cards` list or an event's `card`, so a leak through any new field is caught.
+      ≈25,000 replies, resyncs and conflicts among them, in ≈5 s.
+- [x] The dev surface (`BJ_DEV=on`): `forceShoe`, and a forced round marked as such end to end. A
+      production server refuses to boot with it (and with an in-memory database), naming every
+      violation at once.
+
+Found on the way: ULIDs minted in the same millisecond sorted at random, which shuffled history
+pages — the ids are now monotonic within a millisecond, as the ULID spec's monotonic mode is. And
+history is not pruned to 100 rounds: `/fair` links must outlive the page that shows them, so the
+limit is per page, with `before` to page back.
 
 **Done when:** an integration test plays 1,000 hands over real HTTP with two clients sharing a
 session (two tabs), random lost replies and two server restarts mid-hand, and ends with every wallet
-equal to the sum of its rounds and no hand ever dealt a card twice.
+equal to the sum of its rounds and no hand ever dealt a card twice. ✅ ≈2.5 s against SQLite; each
+lost reply's retry is byte-identical to the reply lost, and every round is verified through `/fair`
+from its seeds. Three mutations — the seed in a log line, the hole card in a reply, idempotency off
+— each turn a suite red.
 
 ## Block S4 — Basic strategy and the realised edge
 

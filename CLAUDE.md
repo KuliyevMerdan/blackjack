@@ -5,7 +5,7 @@ repository.
 
 ## Project status
 
-> ⚠️ **The rules play headless; nothing serves them yet.** **S0 landed 2026-10-02**: the pnpm + Turborepo
+> ⚠️ **The table serves; nothing draws it yet.** **S0 landed 2026-10-02**: the pnpm + Turborepo
 > workspace, strict TypeScript, the dependency graph and the purity rules enforced and *proven to
 > fire* against deliberately illegal fixtures, and CI running `pnpm check`. **S1 landed
 > 2026-10-02**: the four packages everything reads — `money` (exact or nothing), `cards` (the value
@@ -14,8 +14,10 @@ repository.
 > zod schema, with the face-down invariant checked at the boundary). **S2 landed 2026-10-02**: the
 > round machine — deal, insurance, peek, four-hand splits, the dealer, settlement — pure, with
 > `allowed` matched against an independent oracle and 100,000 random hands folding to their
-> snapshots with money conserved at every step. Eight units are still empty shells, each already
-> policed. **S3 (the server) and S4 (strategy + sim) are next, in either order.**
+> snapshots with money conserved at every step. **S3 landed 2026-10-02**: the server — sessions,
+> wallets, seeds, idempotency and versions, SQLite, `/fair` — proven over 1,000 hands with two tabs,
+> lost replies and restarts. Seven units are still empty shells, each already policed. **S4
+> (strategy + sim) and C0 (client-core) are next.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -77,7 +79,7 @@ nowhere to come from.
 
 ### Packages
 
-All thirteen exist since **S0**; the five marked ✅ are written, the rest are empty shells — a
+All thirteen exist since **S0**; the six marked ✅ are written, the rest are empty shells — a
 `src/index.ts` naming its block, a build to `dist/`, and the dependency rules already applied. The
 right-hand column is the block that fills each.
 
@@ -92,7 +94,7 @@ right-hand column is the block that fills each.
 | `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM** | C0 |
 | `packages/director` | `(previous snapshot, events, pace) → Beat[]` — the choreography as data. Pure, **no Pixi, no GSAP** | C1 |
 | `packages/renderer` | the table: Pixi v8 scene, generated card atlas, GSAP timelines on the Pixi ticker, plays `Beat[]`. **No protocol** | C1 |
-| `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair` | S3 |
+| `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production | ✅ S3 |
 | `apps/web` | Vite — the Pixi canvas, a DOM action bar and bet panel over it, the verification page | C1–C3 |
 | `tools/sim` | N-million-hand run of basic strategy: realised house edge and its confidence interval | S4 |
 | `tools/load` | many sessions playing basic strategy against a running server, money audited | P0 |
@@ -180,8 +182,12 @@ package — and `protocol` and `client-core`, which must also run anywhere — c
 
 `apps/server` owns sessions, wallets, seeds, persistence and HTTP. For each request it loads the
 round, regenerates the shoe from its seeds, calls `engine.step(state, command, shoe)`, and persists
-the new state, the events, the reply and the money **in one transaction before replying**. The
-engine returns; it never writes. That is what lets `tools/sim` play millions of hands through the
+the round's inputs, the reply and the money **in one transaction before replying**. A round is
+stored as its inputs — rules, seeds, stake, opening balance, decisions — never as state: every
+request rebuilds the state with `engine.replay`, the verifier's own function, so resume after a
+restart is not a separate path. Each request is synchronous from its first read to its commit
+(better-sqlite3, no `await`), so two tabs are serialised by the event loop. The engine returns; it
+never writes. That is what lets `tools/sim` play millions of hands through the
 code that serves the demo, and the verifier replay one.
 
 ### The client: truth, script, stage
@@ -212,7 +218,7 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 | Engine | every transition and refusal on stacked shoes · `allowed` against an oracle written from §4.2 at every decision of 10,000 hands under random rule sets, and `act` accepting exactly it · 100,000 seeded hands of random legal play: every snapshot and event parsed, events folding to the snapshot, money conserved at every step · 10,000 hands replayed from their decisions alone | ✅ S2 |
 | Statistical | `tools/sim`: basic strategy over ≥10⁷ hands, realised edge within 3σ of the published figure for these rules | S4 |
 | Choreography | `director`: every event sequence ends in its snapshot's picture; skip from any beat lands there too | C1 |
-| Integration | a real server, two tabs on one hand, lost replies, restart mid-hand | S3, P0 |
+| Integration | 1,000 hands over real HTTP on SQLite: two tabs on one session, 15 % of replies lost and retried (byte-identical), two restarts mid-hand — the wallet equal to the sum of its rounds, every round verified from its seeds, every card dealt once · 10,000 hands scanned: no reply or log line carries a hole card or an unrevealed seed | ✅ S3 · P0 adds faults on the wire |
 | E2E | Playwright: a forced split into four hands with a double and a dealer bust, played through the real UI, then verified in the browser | P1 |
 
 ## Commands
@@ -239,7 +245,10 @@ Units resolve each other through their built `dist/` and package `exports`, orde
 `^build` — not through TypeScript project references, which would duplicate what Turborepo already
 orders. `build` therefore runs before `typecheck` and the tests.
 
-Still to come: `pnpm dev` (server + web, watch mode) with **S3/C1**, and
+The server on its own: `pnpm --filter @blackjack/server dev` (tsx watch; `BJ_DEV=on` for
+`forceShoe`, `BJ_DB=<file>` to keep wallets across restarts).
+
+Still to come: `pnpm dev` (server + web, watch mode) with **C1**, and
 `pnpm sim -- --hands 10000000` (the realised edge) with **S4**.
 
 A pre-commit hook (husky → lint-staged) runs ESLint and Prettier over staged files. `turbo.json`
