@@ -52,17 +52,25 @@ describe('bet', () => {
 describe('settings', () => {
   it('are remembered, and default to the system’s reduced-motion preference', () => {
     const storage = inMemory();
-    expect(loadSettings(storage, true)).toEqual({ turbo: false, reducedMotion: true });
-    saveSettings(storage, { turbo: true, reducedMotion: false });
-    expect(loadSettings(storage, true)).toEqual({ turbo: true, reducedMotion: false });
+    expect(loadSettings(storage, true)).toEqual({ turbo: false, reducedMotion: true, hint: false });
+    saveSettings(storage, { turbo: true, reducedMotion: false, hint: false });
+    expect(loadSettings(storage, true)).toEqual({ turbo: true, reducedMotion: false, hint: false });
   });
 
   it('ignore what is not theirs, field by field', () => {
     const storage = inMemory();
     storage.set('bj:settings', '{"turbo":"yes","reducedMotion":true}');
-    expect(loadSettings(storage, false)).toEqual({ turbo: false, reducedMotion: true });
+    expect(loadSettings(storage, false)).toEqual({
+      turbo: false,
+      reducedMotion: true,
+      hint: false,
+    });
     storage.set('bj:settings', 'not json');
-    expect(loadSettings(storage, false)).toEqual({ turbo: false, reducedMotion: false });
+    expect(loadSettings(storage, false)).toEqual({
+      turbo: false,
+      reducedMotion: false,
+      hint: false,
+    });
   });
 });
 

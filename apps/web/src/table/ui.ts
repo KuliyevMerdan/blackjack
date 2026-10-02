@@ -1,5 +1,8 @@
+import type { Read } from '@blackjack/client-core';
 import { formatMinor, minor } from '@blackjack/money';
-import type { Action } from '@blackjack/protocol';
+import type { Action, RoundSummary } from '@blackjack/protocol';
+import { prettyCards } from '../cards.js';
+import { rulesWords } from '../rules.js';
 import type { View } from './controller.js';
 import { KEYS } from './keys.js';
 import type { Settings } from './settings.js';
@@ -10,7 +13,11 @@ export interface Handlers {
   chip(value: number): void;
   clear(): void;
   settings(settings: Settings): void;
+  /** The session's last rounds, newest first — asked for each time the panel opens. */
+  history(): Promise<Read<readonly RoundSummary[]>>;
 }
+
+const REPO = 'https://github.com/KuliyevMerdan/blackjack/blob/main';
 
 const LABELS: Record<Action, string> = {
   hit: 'Hit',
@@ -52,15 +59,41 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
         <p class="notice">Play money only · 18+ · a portfolio demo, not a casino</p>
       </div>
       <div class="tools">
+        <div class="buttons">
+          <button type="button" class="gear" data-open="history" aria-expanded="false"
+            aria-controls="history" aria-label="History">☰</button>
+          <button type="button" class="gear" data-open="about" aria-expanded="false"
+            aria-controls="about" aria-label="Rules and how this works">i</button>
+          <button type="button" class="gear" data-open="settings" aria-expanded="false"
+            aria-controls="settings" aria-label="Settings">⚙</button>
+        </div>
         <div class="status" data-status></div>
-        <button type="button" class="gear" data-gear aria-expanded="false" aria-controls="settings"
-          aria-label="Settings">⚙</button>
       </div>
     </header>
-    <form class="settings" id="settings" data-settings hidden>
+    <form class="sheet settings" id="settings" data-sheet="settings" hidden>
       <label><input type="checkbox" data-turbo /> Turbo — everything plays faster</label>
       <label><input type="checkbox" data-reduced /> Reduced motion — cards appear, nothing travels</label>
+      <label><input type="checkbox" data-hint /> Strategy hint — mark basic strategy's move</label>
     </form>
+    <section class="sheet history" id="history" data-sheet="history" hidden aria-label="History">
+      <h2>Your last hands</h2>
+      <p class="hint-text" data-history-state>Loading…</p>
+      <ol data-history-list></ol>
+    </section>
+    <section class="sheet about" id="about" data-sheet="about" hidden aria-label="Rules">
+      <h2>The rules</h2>
+      <ul data-rules></ul>
+      <h2>How this works</h2>
+      <p>The shoe for each round is fixed before you bet: the server shows a fingerprint (SHA-256) of
+        its secret seed, you add a seed of your own, and the six decks are shuffled from both. When
+        the round ends the secret is revealed, and the round's “Verify” link replays it in your
+        browser — the shuffle and the rules engine are the same code the server runs.</p>
+      <p>The screen never runs ahead of the server: buttons open only for a decision you have
+        already been shown, and the hole card is not in your browser until it turns.</p>
+      <p><a target="_blank" rel="noopener" href="${REPO}/docs/adr/ADR-0001-committed-shoe.md">The committed shoe</a> ·
+        <a target="_blank" rel="noopener" href="${REPO}/docs/adr/ADR-0002-presentation-lags-truth.md">The presentation lags the truth</a></p>
+      <p class="notice">Play money only · 18+ · no real money, payments or crypto.</p>
+    </section>
     <p class="message" data-message role="alert" hidden></p>
     <footer class="controls">
       <p class="line" data-line></p>
@@ -84,10 +117,12 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
   };
   const balance = $<HTMLElement>('[data-balance]');
   const status = $<HTMLElement>('[data-status]');
-  const gear = $<HTMLButtonElement>('[data-gear]');
-  const panel = $<HTMLFormElement>('[data-settings]');
   const turbo = $<HTMLInputElement>('[data-turbo]');
   const reduced = $<HTMLInputElement>('[data-reduced]');
+  const hintBox = $<HTMLInputElement>('[data-hint]');
+  const historyState = $<HTMLElement>('[data-history-state]');
+  const historyList = $<HTMLOListElement>('[data-history-list]');
+  const rulesList = $<HTMLUListElement>('[data-rules]');
   const message = $<HTMLElement>('[data-message]');
   const line = $<HTMLElement>('[data-line]');
   const bet = $<HTMLElement>('[data-bet]');
@@ -98,13 +133,53 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
   const actions = $<HTMLElement>('[data-actions]');
   const announce = $<HTMLElement>('[data-announce]');
 
-  gear.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    gear.setAttribute('aria-expanded', String(!panel.hidden));
-  });
-  const changed = () => handlers.settings({ turbo: turbo.checked, reducedMotion: reduced.checked });
+  // One sheet open at a time, under the HUD; its button says whether it is.
+  const sheets = [...root.querySelectorAll<HTMLElement>('[data-sheet]')];
+  const openers = [...root.querySelectorAll<HTMLButtonElement>('[data-open]')];
+  for (const opener of openers) {
+    opener.addEventListener('click', () => {
+      const name = opener.dataset['open'];
+      for (const sheet of sheets) {
+        sheet.hidden = sheet.dataset['sheet'] !== name || !sheet.hidden;
+      }
+      for (const o of openers) {
+        const shown = sheets.some((sh) => sh.dataset['sheet'] === o.dataset['open'] && !sh.hidden);
+        o.setAttribute('aria-expanded', String(shown));
+      }
+      if (
+        name === 'history' &&
+        sheets.some((sh) => sh.dataset['sheet'] === 'history' && !sh.hidden)
+      ) {
+        void showHistory();
+      }
+    });
+  }
+  const showHistory = async () => {
+    historyState.hidden = false;
+    historyState.textContent = 'Loading…';
+    historyList.replaceChildren();
+    const read = await handlers.history();
+    if (read.kind !== 'ok') {
+      historyState.textContent = 'The history could not be fetched. Try again in a moment.';
+      return;
+    }
+    if (read.value.length === 0) {
+      historyState.textContent = 'No hands yet — deal one.';
+      return;
+    }
+    historyState.hidden = true;
+    historyList.replaceChildren(...read.value.map(historyRow));
+  };
+  const changed = () =>
+    handlers.settings({
+      turbo: turbo.checked,
+      reducedMotion: reduced.checked,
+      hint: hintBox.checked,
+    });
   turbo.addEventListener('change', changed);
   reduced.addEventListener('change', changed);
+  hintBox.addEventListener('change', changed);
+  let rulesShown = false;
   clear.addEventListener('click', () => handlers.clear());
   deal.addEventListener('click', () => handlers.deal());
 
@@ -130,6 +205,17 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
     status.dataset['state'] = view.status;
     turbo.checked = view.settings.turbo;
     reduced.checked = view.settings.reducedMotion;
+    hintBox.checked = view.settings.hint;
+    if (!rulesShown && view.config !== null) {
+      rulesShown = true;
+      rulesList.replaceChildren(
+        ...rulesWords(view.config.rules).map((r) => {
+          const li = document.createElement('li');
+          li.textContent = r;
+          return li;
+        }),
+      );
+    }
     message.hidden = view.message === null;
     message.textContent = view.message ?? '';
 
@@ -166,6 +252,10 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
       const offered = view.round?.allowed.includes(action) ?? false;
       button.hidden = !offered;
       button.disabled = !view.actions.includes(action);
+      const hinted = view.hint === action;
+      button.classList.toggle('hint', hinted);
+      if (hinted) button.setAttribute('aria-description', 'Basic strategy’s move');
+      else button.removeAttribute('aria-description');
     }
 
     // The line over the controls: the round's result once it has played, else the last callout.
@@ -182,4 +272,29 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
       announce.textContent = speech;
     }
   };
+}
+
+/** One past hand: when, the cards, the money — and the link that proves it. */
+function historyRow(round: RoundSummary): HTMLLIElement {
+  const li = document.createElement('li');
+  const when = document.createElement('time');
+  when.dateTime = new Date(round.settledAt).toISOString();
+  when.textContent = new Date(round.settledAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const cards = document.createElement('span');
+  cards.className = 'cards';
+  cards.textContent = `Dealer ${prettyCards(round.dealer)} · You ${round.hands.map(prettyCards).join(' | ')}`;
+  const sums = document.createElement('span');
+  sums.className = 'sums';
+  sums.textContent = `Staked ${money(round.totalStake)} · returned ${money(round.totalPayout)}`;
+  const verify = document.createElement('a');
+  verify.href = `#/verify/${round.roundId}`;
+  verify.target = '_blank';
+  verify.rel = 'noopener';
+  verify.textContent = 'Verify';
+  verify.setAttribute('aria-label', `Verify the hand of ${when.textContent}`);
+  li.append(when, cards, sums, verify);
+  return li;
 }

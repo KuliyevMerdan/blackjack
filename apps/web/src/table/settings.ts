@@ -1,11 +1,13 @@
 import type { KeyValue } from '@blackjack/client-core';
 
-/** The player's two choices about pace, remembered between visits. */
+/** The player's choices about the table's pace and help, remembered between visits. */
 export interface Settings {
   /** Everything plays faster — a `timeScale` on the stage (ADR-0002). */
   readonly turbo: boolean;
   /** Nothing travels: cards appear where they land, one at a time (`REDUCED`). */
   readonly reducedMotion: boolean;
+  /** Basic strategy's choice marked on the action bar — the table `tools/sim` measured. */
+  readonly hint: boolean;
 }
 
 const KEY = 'bj:settings';
@@ -18,7 +20,7 @@ export const TURBO_SPEED = 2.5;
  * stored value that is not ours — another version's, a hand edit — is ignored field by field.
  */
 export function loadSettings(storage: KeyValue, prefersReducedMotion: boolean): Settings {
-  const fallback: Settings = { turbo: false, reducedMotion: prefersReducedMotion };
+  const fallback: Settings = { turbo: false, reducedMotion: prefersReducedMotion, hint: false };
   let raw: unknown;
   try {
     const text = storage.get(KEY);
@@ -33,7 +35,8 @@ export function loadSettings(storage: KeyValue, prefersReducedMotion: boolean): 
     'reducedMotion' in raw && typeof raw.reducedMotion === 'boolean'
       ? raw.reducedMotion
       : fallback.reducedMotion;
-  return { turbo, reducedMotion };
+  const hint = 'hint' in raw && typeof raw.hint === 'boolean' ? raw.hint : fallback.hint;
+  return { turbo, reducedMotion, hint };
 }
 
 export function saveSettings(storage: KeyValue, settings: Settings): void {

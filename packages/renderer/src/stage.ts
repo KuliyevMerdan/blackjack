@@ -119,6 +119,19 @@ export class Stage {
   private readonly shoe: Sprite;
   private readonly ring = new Graphics();
   private readonly dealerLabel: Text;
+  /** The rules, printed on the felt the way a real table prints them. */
+  private readonly print = new Text({
+    text: '',
+    style: {
+      fontFamily: FONT,
+      fontSize: 11,
+      fontWeight: '700',
+      fill: 0xe9d8a6,
+      letterSpacing: 1.5,
+      align: 'center',
+      lineHeight: 16,
+    },
+  });
   private readonly insuranceLabel: Text;
   private readonly handLabels: Text[] = [];
   private readonly views = new Map<string, CardView>();
@@ -138,7 +151,17 @@ export class Stage {
     this.dealerLabel = label();
     this.insuranceLabel = label();
     this.cards.sortableChildren = true;
-    this.root.addChild(this.felt, this.shoe, this.ring, this.chipLayer, this.cards, this.marks);
+    this.print.anchor.set(0.5, 0);
+    this.print.alpha = 0.45;
+    this.root.addChild(
+      this.felt,
+      this.print,
+      this.shoe,
+      this.ring,
+      this.chipLayer,
+      this.cards,
+      this.marks,
+    );
     this.marks.addChild(this.dealerLabel, this.insuranceLabel);
     for (let i = 0; i < 4; i += 1) {
       const text = label();
@@ -253,6 +276,20 @@ export class Stage {
       tween.kill();
       this.tweens.delete(tween);
     }
+  }
+
+  /** What the felt says — the rules, worded by the app from the config (the stage cannot read it). */
+  setFelt(text: string): void {
+    this.print.text = text;
+    this.placePrint();
+  }
+
+  /** Under the dealer's row, above the hands — behind every card that climbs into it. */
+  private placePrint(): void {
+    const first = this.place.hands[0];
+    const y =
+      first === undefined ? this.options.height / 2 : first.y - this.place.cardHeight * 1.25;
+    this.print.position.set(this.options.width / 2, Math.round(y));
   }
 
   /**
@@ -527,6 +564,7 @@ export class Stage {
   private mark(picture: StagePicture): void {
     const { format } = this.options;
     const l = this.place;
+    this.placePrint();
     const up = picture.dealer.filter((f): f is Card => f !== null);
     this.dealerLabel.text =
       up.length === 0 ? '' : `${totalOf(up)}${value(up).bust ? ' · bust' : ''}`;

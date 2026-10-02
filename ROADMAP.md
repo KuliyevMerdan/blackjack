@@ -33,7 +33,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ✅ (landed 2026-10-02) |
 | **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ✅ (landed 2026-10-02) |
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ✅ (landed 2026-10-02) |
-| **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ☐ |
+| **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ✅ (landed 2026-10-02) |
 | **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ☐ |
 | **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ☐ |
 
@@ -391,21 +391,45 @@ reports which hand lacked a result if one ever does.
 
 _2 days._
 
-- [ ] Round history: the session's last 30 hands, each a row with the cards, the stakes and the
-      payout, each linking to its verification page.
-- [ ] **The verification page** (`#/verify/:roundId`): fetch the public record, and show each step of
+- [x] Round history: the session's last 30 hands, each a row with the cards, the stakes and the
+      payout, each linking to its verification page. A ☰ in the HUD opens it, fetched afresh each
+      time (`Client.history()`, a read that takes no turn); each row's time, dealer and hands as a
+      player writes them (`10♦`), staked and returned, and a Verify link that opens in a new tab.
+- [x] **The verification page** (`#/verify/:roundId`): fetch the public record, and show each step of
       [`docs/protocol.md`](docs/protocol.md) §3.4 — the commit, this browser's own memory of the
       commit and client seed, the shuffle's first cards, and the hand replayed through `engine` card
       by card to the same payouts. Caught failing against a lying server: a wrong seed, a swapped
-      card, a changed decision, a different client seed than the one sent.
-- [ ] The strategy hint: an optional highlight on the action basic strategy recommends — the same
+      card, a changed decision, a different client seed than the one sent. `src/verify/verify.ts`
+      is the checks — pure, and the only module of the web app that reaches the engine; `page.ts`
+      shows them one by one as they are computed, a verdict over them, the replay line by line and
+      the rules the round was played under. A forced shoe (§9) is *not verifiable*, never verified;
+      a browser that did not deal the round says it cannot vouch for the seeds and still checks the
+      rest. **Decided:** the page is a dynamic import, so the engine ships only to it and Pixi only to
+      the table (checked in the built chunks); everything from the record is set as text — a client
+      seed is any printable ASCII a player typed. Tested against six lies (two beyond the
+      four named here: a seed and commit swapped together, which only the browser's memory catches,
+      and a card swapped in the snapshot rather than the shoe) and a hundred honest rounds.
+- [x] The strategy hint: an optional highlight on the action basic strategy recommends — the same
       table `tools/sim` measured, so the edge the README publishes is the edge the hint plays.
-- [ ] The 18+/play-money notice, the rules worded from `GameConfig.rules`, and a short "how this
-      works" panel linking the ADRs.
+      `strategy.recommend` on the decision on screen, a ring and a ★ on its button and an
+      `aria-description`; off by default, a setting, remembered (`?hint` for one visit).
+- [x] The 18+/play-money notice, the rules worded from `GameConfig.rules`, and a short "how this
+      works" panel linking the ADRs. The notice sits under the balance; the rules are printed on the
+      felt as a real table prints them ("BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON SOFT 17 ·
+      INSURANCE PAYS 2 TO 1") and listed in full under the HUD's *i*, with the committed shoe and
+      the lagging presentation in three paragraphs and two ADR links. Every line is read from the
+      config (`src/rules.ts`), never typed.
 
 **Done when:** a stranger can lose a hand, open its verification link, and watch the browser rebuild
 the shoe, replay their decisions and arrive at the same result — without trusting the server for any
-of it.
+of it. **Met 2026-10-02** (`pnpm --filter @blackjack/web verify`, ≈20 s): a fresh Chromium context
+against a production-mode server plays until a hand is lost, opens the history, follows that hand's
+Verify link into a new tab, and the page arrives at **Verified** with all four checks holding and the
+round replayed line by line. A second fresh context opens the same link: verified, step 2 *cannot be
+checked here*. Then the first player's browser opens it through a lying server — the public record
+rewritten in flight four ways: a seed that is not the committed one, two dealt cards swapped, the last
+decision dropped, a client seed one character off — and **all four come out Not verified**, each at
+the step that catches it (commit; shuffle; replay; this browser's memory).
 
 ---
 

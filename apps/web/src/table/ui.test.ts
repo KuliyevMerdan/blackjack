@@ -2,6 +2,7 @@
 import type { Round } from '@blackjack/protocol';
 import { describe, expect, it } from 'vitest';
 import type { View } from './controller.js';
+import type { RoundSummary } from '@blackjack/protocol';
 import { mountUi, type Handlers } from './ui.js';
 
 /**
@@ -42,10 +43,24 @@ const VIEW: View = {
   callout: 'Dealer checked — no blackjack.',
   prompt: 'You have 9, 9 — 18. Dealer shows a king. Hit, stand, double or split?',
   summary: null,
-  settings: { turbo: false, reducedMotion: false },
+  hint: null,
+  settings: { turbo: false, reducedMotion: false, hint: false },
 };
 
-function mount() {
+const SUMMARY = {
+  roundId: '01K6H3Z8Q4M2V7XKX0C9T5RB1N',
+  settledAt: 1_759_400_000_000,
+  stake: 500,
+  totalStake: 1000,
+  totalPayout: 2000,
+  dealer: ['KS', '7D'],
+  hands: [
+    ['8S', 'TD'],
+    ['8H', 'QC'],
+  ],
+} as unknown as RoundSummary;
+
+function mount(history: readonly RoundSummary[] = []) {
   const root = document.createElement('div');
   document.body.replaceChildren(root);
   const calls: string[] = [];
@@ -55,6 +70,7 @@ function mount() {
     chip: (v) => calls.push(`chip ${v}`),
     clear: () => calls.push('clear'),
     settings: (s) => calls.push(`settings ${JSON.stringify(s)}`),
+    history: async () => ({ kind: 'ok', value: history }),
   };
   const show = mountUi(root, handlers);
   const buttons = () =>
@@ -156,6 +172,59 @@ describe('the bet panel and the result', () => {
     if (turbo === null) throw new Error('no turbo');
     turbo.checked = true;
     turbo.dispatchEvent(new Event('change'));
-    expect(calls).toEqual(['settings {"turbo":true,"reducedMotion":false}']);
+    expect(calls).toEqual(['settings {"turbo":true,"reducedMotion":false,"hint":false}']);
+  });
+});
+
+describe('the hint, the history and the rules', () => {
+  it('marks the hinted button for the eye and the screen reader', () => {
+    const { show, buttons } = mount();
+    show({ ...VIEW, hint: 'stand' });
+    const hinted = buttons().filter((b) => b.classList.contains('hint'));
+    expect(hinted.map((b) => b.dataset['action'])).toEqual(['stand']);
+    expect(hinted[0]?.getAttribute('aria-description')).toMatch(/strategy/);
+    show({ ...VIEW, hint: null });
+    expect(buttons().some((b) => b.classList.contains('hint'))).toBe(false);
+  });
+
+  it('lists the last hands, each with its verification link', async () => {
+    const { root, show } = mount([SUMMARY]);
+    show(VIEW);
+    root.querySelector<HTMLButtonElement>('[data-open="history"]')?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    const rows = [...root.querySelectorAll('[data-history-list] li')];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain('Dealer K♠ 7♦ · You 8♠ 10♦ | 8♥ Q♣');
+    expect(rows[0]?.textContent).toContain('Staked €10.00 · returned €20.00');
+    expect(rows[0]?.querySelector('a')?.getAttribute('href')).toBe(
+      '#/verify/01K6H3Z8Q4M2V7XKX0C9T5RB1N',
+    );
+  });
+
+  it('words the rules from the config', () => {
+    const { root, show } = mount();
+    const rules = {
+      decks: 6,
+      dealerHitsSoft17: false,
+      blackjackPays: [3, 2],
+      peek: true,
+      insurance: true,
+      doubleOn: 'ANY_TWO',
+      doubleAfterSplit: true,
+      maxHands: 4,
+      splitBy: 'VALUE',
+      resplitAces: false,
+      hitSplitAces: false,
+      surrender: false,
+      autoStandOn21: true,
+    };
+    show({
+      ...VIEW,
+      config: { currency: 'EUR', betUnit: 100, minBet: 100, maxBet: 10_000, rules },
+    } as unknown as View);
+    const words = [...root.querySelectorAll('[data-rules] li')].map((li) => li.textContent);
+    expect(words).toContain('Blackjack pays 3 to 2');
+    expect(words).toContain('Dealer stands on soft 17');
+    expect(words).toContain('Split any two cards of the same value, up to 4 hands');
   });
 });

@@ -10,6 +10,7 @@ export {
   type Change,
   type ClientOptions,
   type Outcome,
+  type Read,
   type Status,
   type Truth,
 } from './client.js';

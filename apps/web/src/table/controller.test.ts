@@ -491,10 +491,10 @@ describe('the bet panel', () => {
 describe('settings', () => {
   it('turbo is the stage’s speed, set at once; reduced motion is the next script’s pace', async () => {
     const { stage, table } = await setUp('reply', {
-      settings: { turbo: true, reducedMotion: false },
+      settings: { turbo: true, reducedMotion: false, hint: false },
     });
     expect(stage.speed).toBe(2.5);
-    table.configure({ turbo: false, reducedMotion: true });
+    table.configure({ turbo: false, reducedMotion: true, hint: false });
     expect(stage.speed).toBe(1);
     await table.deal();
     expect(stage.cues.every((c) => c.ms === 0)).toBe(true);
@@ -588,5 +588,24 @@ describe('insurance under an ace', () => {
     expect(last().callout).toBe('Dealer checked — no blackjack. Insurance lost.');
     expect(last().actions).toEqual(['hit', 'stand', 'double']);
     expect(stage.proposals).toEqual([]); // insurance is not one of the optimistic moves
+  });
+});
+
+describe('the strategy hint', () => {
+  it('marks basic strategy’s move once the decision is on screen — and only when asked', async () => {
+    const on = await dealt('reply', {
+      settings: { turbo: false, reducedMotion: false, hint: true },
+    });
+    expect(on.last().hint).toBe('stand'); // 9-9 against a king: stand
+    const off = await dealt();
+    expect(off.last().hint).toBeNull();
+  });
+
+  it('is gone while the gate is shut', async () => {
+    const { table, last } = await setUp('reply', {
+      settings: { turbo: false, reducedMotion: false, hint: true },
+    });
+    await table.deal();
+    expect(last().hint).toBeNull();
   });
 });

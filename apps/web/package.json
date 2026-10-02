@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --config ../../config/vitest.package.ts",
     "perf": "node scripts/perf.mjs",
-    "decisions": "node scripts/decisions.mjs"
+    "decisions": "node scripts/decisions.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@blackjack/cards": "workspace:*",

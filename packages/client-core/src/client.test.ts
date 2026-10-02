@@ -1,9 +1,9 @@
 import { minor } from '@blackjack/money';
 import { describe, expect, it } from 'vitest';
-import { FakeServer } from './__fixtures__/server.js';
+import { CONFIG, FakeServer } from './__fixtures__/server.js';
 import { Client, InvariantError, canonical, type Change, type ClientOptions } from './client.js';
 import { inMemory, type KeyValue } from './memory.js';
-import { httpTransport, TransportError, type Transport } from './transport.js';
+import { httpTransport, TransportError, type Response, type Transport } from './transport.js';
 
 /** A seeded LCG: the same faults and choices every run. */
 function lcg(seed: number): () => number {
@@ -366,4 +366,62 @@ describe('1,000 hands through a hostile network', () => {
     expect(tally.hands).toBe(1000);
     expect(server.dropped).toBeGreaterThan(100);
   }, 60_000);
+});
+
+describe('reads', () => {
+  const summary = {
+    roundId: '01K6H3Z8Q4M2V7XKX0C9T5RB1N',
+    settledAt: 1_759_400_000_000,
+    stake: 500,
+    totalStake: 500,
+    totalPayout: 0,
+    dealer: ['KS', '7D'],
+    hands: [['9H', '8C']],
+  };
+  const reader = (answers: Record<string, Response>) => {
+    const seen: string[] = [];
+    const transport: Transport = async (request) => {
+      seen.push(`${request.method} ${request.path} ${request.token ?? '-'}`);
+      const key = Object.keys(answers).find((k) => request.path.startsWith(k));
+      if (key === undefined) throw new TransportError('nothing there');
+      return answers[key] ?? { status: 500, body: null };
+    };
+    return { transport, seen };
+  };
+  const session = {
+    status: 200,
+    body: {
+      token: 'a1'.repeat(32),
+      balance: 100_000,
+      config: CONFIG,
+      commit: 'ab'.repeat(32),
+      round: null,
+    },
+  };
+
+  it('history asks with the session’s token and parses the rounds', async () => {
+    const { transport, seen } = reader({
+      '/api/session': session,
+      '/api/history': { status: 200, body: { rounds: [summary] } },
+    });
+    const c = client(transport, { retry: { attempts: 1 } });
+    await c.open();
+    const read = await c.history();
+    expect(read.kind).toBe('ok');
+    expect(seen.at(-1)).toBe(`GET /api/history?limit=30 ${'a1'.repeat(32)}`);
+  });
+
+  it('a fair record is public, unknown on a 404, and parsed like any reply', async () => {
+    const { transport, seen } = reader({
+      '/fair/rounds/01K6H3Z8Q4M2V7XKX0C9T5RB1N': { status: 200, body: { roundId: 'not a record' } },
+      '/fair/rounds/01K6H3Z8Q4M2V7XKX0C9T5RB1Z': {
+        status: 404,
+        body: { error: { class: 'PLAYER', code: 'UNKNOWN_ROUND', message: 'none' } },
+      },
+    });
+    const c = client(transport, { retry: { attempts: 1 } });
+    expect((await c.fairRecord('01K6H3Z8Q4M2V7XKX0C9T5RB1Z')).kind).toBe('unknown');
+    expect((await c.fairRecord('01K6H3Z8Q4M2V7XKX0C9T5RB1N')).kind).toBe('failed');
+    expect(seen.every((s) => s.endsWith(' -'))).toBe(true); // no token on a public read
+  });
 });

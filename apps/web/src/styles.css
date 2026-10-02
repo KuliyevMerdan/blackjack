@@ -81,8 +81,13 @@ body {
 }
 .tools {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.tools .buttons {
+  display: flex;
+  gap: 6px;
 }
 .gear {
   pointer-events: auto;
@@ -94,7 +99,7 @@ body {
   color: var(--ink);
   font-size: 1.1rem;
 }
-.settings {
+.sheet {
   pointer-events: auto;
   align-self: flex-end;
   margin-top: 8px;
@@ -103,9 +108,61 @@ body {
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: var(--panel);
+  background: rgba(6, 30, 19, 0.96);
   font-size: 0.9rem;
-  max-width: 22rem;
+  width: min(26rem, 100%);
+  max-height: 60vh;
+  overflow-y: auto;
+  position: relative;
+  z-index: 2;
+}
+.sheet h2 {
+  margin: 4px 0 0;
+  font-size: 0.95rem;
+}
+.sheet p,
+.sheet ul,
+.sheet ol {
+  margin: 0;
+}
+.sheet ul {
+  padding-left: 1.1rem;
+  line-height: 1.5;
+}
+.sheet a {
+  color: var(--gold);
+}
+.history ol {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2px 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(244, 241, 232, 0.15);
+}
+.history time {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.history .cards {
+  grid-column: 2;
+}
+.history .sums {
+  grid-column: 2;
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+.history a {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-weight: 700;
 }
 .settings label {
   display: flex;
@@ -206,6 +263,15 @@ body {
 .controls button:disabled {
   opacity: 0.45;
 }
+/* Basic strategy's move: a ring and a star — never the only way to tell it (aria-description). */
+.actions button.hint:not(:disabled) {
+  box-shadow:
+    0 0 0 3px var(--felt),
+    0 0 0 6px #fff;
+}
+.actions button.hint::after {
+  content: ' ★';
+}
 .controls button:focus-visible,
 .gear:focus-visible {
   outline: 3px solid #fff;
@@ -242,4 +308,126 @@ kbd {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* ── the verification page ───────────────────────────────────────────────────────────────── */
+body.page {
+  overflow: auto;
+}
+body.page #ui {
+  position: static;
+  pointer-events: auto;
+  display: block;
+  padding: 0;
+}
+.verify {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) 16px 48px;
+  line-height: 1.5;
+}
+.verify h1 {
+  margin: 12px 0 0;
+  font-size: 1.5rem;
+}
+.verify .id,
+.verify .detail {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  color: var(--dim);
+  margin: 2px 0;
+}
+.verify .back,
+.verify a {
+  color: var(--gold);
+}
+.verify .verdict {
+  font-weight: 700;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--panel);
+}
+.verify .verdict.verified {
+  color: #9be7b4;
+}
+.verify .verdict.failed {
+  color: #ff9b8f;
+}
+.verify .verdict.unverifiable,
+.verify .loading.failed {
+  color: var(--gold);
+}
+.verify .steps {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.verify .step {
+  position: relative;
+  padding: 12px 14px 12px 52px;
+  border-radius: 10px;
+  background: var(--panel);
+  animation: arrive 260ms ease-out;
+}
+.verify .step h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.verify .step .state {
+  margin: 2px 0 6px;
+  font-weight: 600;
+}
+.verify .mark {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #1b1b1f;
+  background: var(--dim);
+}
+.verify .pass .mark {
+  background: #9be7b4;
+}
+.verify .fail .mark {
+  background: #ff9b8f;
+}
+.verify .forced .mark,
+.verify .unknown .mark {
+  background: var(--gold);
+}
+.verify section {
+  margin-top: 20px;
+}
+.verify section h2 {
+  font-size: 1.05rem;
+  margin: 0 0 6px;
+}
+.verify .replay ol {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  padding-left: 2.2rem;
+}
+.verify .how {
+  margin-top: 24px;
+  color: var(--dim);
+  font-size: 0.9rem;
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .verify .step {
+    animation: none;
+  }
 }

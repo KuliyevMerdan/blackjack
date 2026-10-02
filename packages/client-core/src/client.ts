@@ -2,15 +2,19 @@ import type { Minor } from '@blackjack/money';
 import {
   actionReply,
   errorReply,
+  fairRecord,
   fold,
+  historyReply,
   roundReply,
   sessionReply,
   tableOf,
   type Action,
   type ErrorCode,
+  type FairRecord,
   type GameConfig,
   type GameEvent,
   type Round,
+  type RoundSummary,
 } from '@blackjack/protocol';
 import { inMemory, SentRounds, type KeyValue } from './memory.js';
 import { TransportError, type Request, type Response, type Transport } from './transport.js';
@@ -52,6 +56,12 @@ export type Outcome =
   /** The session was not known; a new one is open, with a new wallet. */
   | { readonly kind: 'sessionLost' }
   /** No usable reply after every retry. The truth is unchanged; `resync()` asks again. */
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/** A read's answer: the value, no such thing, or no usable reply. */
+export type Read<T> =
+  | { readonly kind: 'ok'; readonly value: T }
+  | { readonly kind: 'unknown' }
   | { readonly kind: 'failed'; readonly reason: string };
 
 export interface ClientOptions {
@@ -249,6 +259,46 @@ export class Client {
       };
       return this.game('/api/act', body, truth);
     });
+  }
+
+  // ── reading ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * This session's settled rounds, newest first (§2.6). A read: it changes no truth, takes no turn
+   * and may run while a game request is out — the history is a list beside the table, not a move.
+   */
+  async history(limit = 30): Promise<Read<readonly RoundSummary[]>> {
+    const truth = this.truth;
+    if (truth === null) return { kind: 'failed', reason: 'no session yet' };
+    const sent = await this.call({
+      method: 'GET',
+      path: `/api/history?limit=${limit}`,
+      token: truth.token,
+    });
+    if (sent.kind === 'lost') return { kind: 'failed', reason: sent.reason };
+    const reply = historyReply.safeParse(sent.body);
+    if (sent.status !== 200 || !reply.success) {
+      return { kind: 'failed', reason: `history answered ${sent.status}` };
+    }
+    return { kind: 'ok', value: reply.data.rounds };
+  }
+
+  /**
+   * A settled round's public record (§3.4) — no token, so anyone with the link can ask. Parsed with
+   * its schema like any reply; whether it is *true* is the verifier's question, not this one's.
+   */
+  async fairRecord(roundId: string): Promise<Read<FairRecord>> {
+    const sent = await this.call({
+      method: 'GET',
+      path: `/fair/rounds/${encodeURIComponent(roundId)}`,
+    });
+    if (sent.kind === 'lost') return { kind: 'failed', reason: sent.reason };
+    if (sent.status === 404 || sent.status === 400) return { kind: 'unknown' };
+    const record = fairRecord.safeParse(sent.body);
+    if (sent.status !== 200 || !record.success) {
+      return { kind: 'failed', reason: `the record answered ${sent.status} and did not parse` };
+    }
+    return { kind: 'ok', value: record.data };
   }
 
   // ── the request path ────────────────────────────────────────────────────────────────────

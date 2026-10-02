@@ -2,6 +2,7 @@ import type { Change, Client, Outcome, Status } from '@blackjack/client-core';
 import { direct, NORMAL, pictureOf, REDUCED, type Cue } from '@blackjack/director';
 import { minor } from '@blackjack/money';
 import type { Action, GameConfig, Round } from '@blackjack/protocol';
+import { recommend } from '@blackjack/strategy';
 import type { Playback, Proposal, Proposed, StageCue, StagePicture } from '@blackjack/renderer';
 import { add, canAdd, chipsFor, dealable, fit, limitsOf } from './bet.js';
 import { TURBO_SPEED, type Settings } from './settings.js';
@@ -45,6 +46,8 @@ export interface View {
   readonly prompt: string | null;
   /** The result moment: shown once the last result has played, gone at the next Deal. */
   readonly summary: Summary | null;
+  /** Basic strategy's choice among `actions`, when the player asked for the hint. */
+  readonly hint: Action | null;
   readonly settings: Settings;
 }
 
@@ -75,7 +78,7 @@ export class TableController {
     options: { readonly settings?: Settings; readonly stake?: number } = {},
     private readonly format: (minor: number) => string = String,
   ) {
-    this.settings = options.settings ?? { turbo: false, reducedMotion: false };
+    this.settings = options.settings ?? { turbo: false, reducedMotion: false, hint: false };
     this.stake = options.stake ?? 500;
     this.stage.setSpeed(this.settings.turbo ? TURBO_SPEED : 1);
     this.unsubscribe.push(
@@ -217,6 +220,7 @@ export class TableController {
     const limits = this.limits();
     const stake = limits === null ? this.stake : fit(this.stake, limits);
     const caughtUp = gateOpen && !busy;
+    const actions = caughtUp && round !== null ? round.allowed : [];
     return {
       status: this.client.status,
       hud: this.hud,
@@ -232,12 +236,13 @@ export class TableController {
             })),
       gateOpen,
       busy,
-      actions: caughtUp && round !== null ? round.allowed : [],
+      actions,
       canDeal: limits !== null && !open && caughtUp && dealable(stake, limits),
       message: this.message,
       callout: this.callout,
       prompt: caughtUp && round !== null ? promptOf(round) : null,
       summary: caughtUp && round !== null ? summaryOf(round, this.format) : null,
+      hint: this.settings.hint ? hintFor(round, actions) : null,
       settings: this.settings,
     };
   }
@@ -250,4 +255,17 @@ export class TableController {
 function requireRound(truth: Change['next']): Round {
   if (truth.round === null) throw new Error('a reply with events always carries its round');
   return truth.round;
+}
+
+/**
+ * Basic strategy's move for the decision on screen — `strategy.recommend`, always one of `allowed`.
+ * A suggestion on a button the player still presses: it decides nothing and moves no money.
+ */
+function hintFor(round: Round | null, actions: readonly Action[]): Action | null {
+  if (round === null || actions.length === 0) return null;
+  const [up] = round.dealer.cards;
+  const hand = round.hands[round.activeHand ?? 0];
+  if (up === undefined || hand === undefined) return null;
+  const choice = recommend(hand.cards, up, actions);
+  return actions.includes(choice) ? choice : null;
 }
