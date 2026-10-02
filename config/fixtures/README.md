@@ -25,6 +25,9 @@ nothing on its own; these are the other half.
 | `packages/client-core/src/illegal-engine.ts` | the client holds the truth; what it ships never runs the rules | `.dependency-cruiser.cjs` |
 | `packages/client-core/src/__fixtures__/legal-server.ts` | its *test code* may build a fake server from the engine and the shuffle | `.dependency-cruiser.cjs` |
 | `packages/client-core/src/__fixtures__/illegal-renderer.ts` | even its test code stays off the stage | `.dependency-cruiser.cjs` |
+| `packages/director/src/illegal-engine.ts` | the director scripts the events it is handed; it never plays a round | `.dependency-cruiser.cjs` |
+| `packages/renderer/src/__fixtures__/legal-rounds.ts` | its *test code* may script real rounds through the director — what it ships still cannot see a reply | `.dependency-cruiser.cjs` |
+| `packages/director/src/__fixtures__/legal-rounds.ts` | its *test code* may play real rounds to have something to script | `.dependency-cruiser.cjs` |
 | `apps/server/src/illegal-web.ts` | nothing imports an app | `.dependency-cruiser.cjs` |
 | `tools/sim/src/illegal-server.ts` | the sim measures the engine, not the server | `.dependency-cruiser.cjs` |
 | `tools/load/src/illegal-engine.ts` | the load tool plays over the wire, as a client does | `.dependency-cruiser.cjs` |

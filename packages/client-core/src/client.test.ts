@@ -187,6 +187,32 @@ describe('the four error classes', () => {
   });
 });
 
+describe('connection status', () => {
+  it('connecting → online, retrying while it re-sends, offline when it gives up', async () => {
+    const server = new FakeServer();
+    const c = client(server.transport);
+    const seen: string[] = [c.status];
+    c.onStatus((s) => seen.push(s));
+    await c.open();
+    server.faults = { unavailable: 2 };
+    await c.deal(STAKE);
+    server.faults = { unavailable: 100 };
+    await c.resync();
+    expect(seen).toEqual(['connecting', 'online', 'retrying', 'online', 'retrying', 'offline']);
+  });
+
+  it('outdated when the server answers with something this client cannot read', async () => {
+    const server = new FakeServer();
+    const c = client(server.transport);
+    await c.open();
+    server.faults = {
+      tamper: (body) => ({ ...(body as object), round: { roundId: 'from-the-future' } }),
+    };
+    await c.deal(STAKE);
+    expect(c.status).toBe('outdated');
+  });
+});
+
 describe('lost replies, restarts and moved commits', () => {
   it('a reply lost after the server applied it is recovered by the retry, not guessed', async () => {
     const server = new FakeServer();

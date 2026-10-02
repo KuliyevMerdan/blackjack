@@ -31,7 +31,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ✅ (landed 2026-10-02) |
 | **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ✅ (landed 2026-10-02) |
 | **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ✅ (landed 2026-10-02) |
-| **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ☐ |
+| **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ✅ (landed 2026-10-02) |
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ☐ |
 | **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ☐ |
 | **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ☐ |
@@ -269,25 +269,51 @@ equal to the server's. ✅ seeded, ≈1 s.
 
 _3 days._
 
-- [ ] `apps/web` bootstrap: Vite, one Pixi v8 canvas, a DOM layer over it, `client-core` wired;
-      connection states that are real UI (connecting / retrying / out of date).
-- [ ] `packages/renderer`: the felt, the shoe, the dealer row and the player's hand positions, a
+- [x] `apps/web` bootstrap: Vite, one Pixi v8 canvas, a DOM layer over it, `client-core` wired;
+      connection states that are real UI (connecting / retrying / out of date). `client-core` gained
+      a status stream for it — `connecting`, `online`, `retrying`, `offline`, and `outdated` for a
+      reply this client cannot parse (a newer server; a reload fixes it). `pnpm dev` runs both.
+- [x] `packages/renderer`: the felt, the shoe, the dealer row and the player's hand positions, a
       generated card atlas (faces, back) — the art question from [`CLAUDE.md`](CLAUDE.md) § Gaps
       decided by boot time and sharpness at 3× DPR. **GSAP driven by the Pixi ticker**:
-      `gsap.ticker` removed, `gsap.updateRoot` called from Pixi's — one clock.
-- [ ] `packages/director`: `(previous, events, pace) → Beat[]` for the deal, the peek, the hole card's
+      `gsap.ticker` removed, `gsap.updateRoot` called from Pixi's — one clock. **Decided:**
+      `Graphics` + `Text` drawn once at the device's ratio into one 13 × 5 texture (3,744 × 2,010 at
+      3×, under the 4,096 limit), ≈100 ms at boot, sliced into frames that share one source — one
+      draw call for every card, no shipped art, no licence. The renderer declares its own picture
+      and cue types; the director's fit them, and `apps/web` is where the compiler holds the two
+      together.
+- [x] `packages/director`: `(previous, events, pace) → Beat[]` for the deal, the peek, the hole card's
       turn, the dealer's draws and settlement. Every beat has an animated path and a snap path in
-      the renderer, and the director's tests prove each script ends in its snapshot's picture.
-- [ ] The decision gate: the action bar's state is a function of the timeline's position, not of the
-      truth alone ([ADR-0002](docs/adr/ADR-0002-presentation-lags-truth.md)).
-- [ ] The beat-gated balance: the HUD shows the truth's balance minus the payouts not yet played.
-- [ ] Skip: a tap or a key completes the timeline; a hidden tab returns to the end state.
-- [ ] Pace written down ([`CLAUDE.md`](CLAUDE.md) § Gaps): card travel, flip, dealer pause, settle
-      gap — and the median length of a round at normal pace, measured.
+      the renderer, and the director's tests prove each script ends in its snapshot's picture. Each
+      cue carries the `Picture` after it, so the renderer animates between pictures and never
+      interprets a message. Splits, doubles and insurance are scripted already; C2 gives them their
+      choreography.
+- [x] The decision gate: the action bar's state is a function of the timeline's position, not of the
+      truth alone ([ADR-0002](docs/adr/ADR-0002-presentation-lags-truth.md)). Every reply ends on
+      a decision or a settlement, so the gate is the script's last beat: buttons are disabled, not
+      hidden, until it has played — and a press before then sends nothing (tested).
+- [x] The beat-gated balance: the HUD shows the truth's balance minus the payouts not yet played.
+      Each cue carries its HUD figure; a stake leaves at once, a win arrives with its settle beat.
+- [x] Skip: a tap or a key completes the timeline; a hidden tab returns to the end state. Tap on the
+      felt, `Escape` or Space; `visibilitychange` skips; a new reply skips whatever was still
+      catching up.
+- [x] Pace written down ([`CLAUDE.md`](CLAUDE.md) § Gaps): card travel, flip, dealer pause, settle
+      gap — and the median length of a round at normal pace, measured. `director/src/pace.ts`:
+      travel 300 ms + 90 ms between cards, flip 260, peek 600, the dealer's pause 450 before each
+      card of their own, settle 380 a hand. **A round's animation: median 3.97 s, p90 4.97 s** over
+      5,000 rounds (stand on 17+, hit below) — thinking time not counted. `?turbo` plays at 0.4×.
 
 **Done when:** a round dealt, stood and settled holds 60 fps on a throttled mobile profile, memory is
 flat across 500 rounds (no textures or tweens left behind), and skipping from every beat of a round
-lands on the same picture as watching it to the end.
+lands on the same picture as watching it to the end. **Met 2026-10-02** (`pnpm --filter @blackjack/web perf`,
+Chromium on the machine's GPU, 375×812 at 3× DPR, CPU throttled 4×, two runs): ≈6,650 animation
+frames, none over 25 ms and none over twice the idle interval; a frame's work 1.8 ms at p99 and
+5.5 ms at worst against a 16.7 ms budget, no long tasks; heap 7.0 → 7.2 MB from round 50 to 500
+with one sprite per card on the table and no tweens; 50 random skips in the browser equal to a
+fresh render; the atlas ≈105 ms, Deal usable 0.4–0.55 s after navigation. **Measured, not
+assumed:** the first run used Playwright's default headless shell and reported 30 fps — its WebGL is
+SwiftShader on the CPU, and idle frames ran at 34 ms with our code costing under 3 ms of them; a
+CPU profile put ~67 s in native GL and 0.1 s in the hottest JS function. A real phone is P0's.
 
 ## Block C2 — Decisions
 

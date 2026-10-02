@@ -1,0 +1,135 @@
+:root {
+  --felt: #0f5132;
+  --ink: #f4f1e8;
+  --dim: rgba(244, 241, 232, 0.7);
+  --gold: #f2c94c;
+  --panel: rgba(6, 30, 19, 0.82);
+  color-scheme: dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--felt);
+  color: var(--ink);
+  overscroll-behavior: none;
+}
+#stage {
+  position: fixed;
+  inset: 0;
+  touch-action: manipulation;
+}
+#stage canvas {
+  display: block;
+}
+#ui {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+}
+#ui button,
+#ui output {
+  pointer-events: auto;
+}
+.hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.balance strong {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.label {
+  color: var(--dim);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.status {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--panel);
+}
+.status[data-state='online'] {
+  color: #9be7b4;
+}
+.status[data-state='retrying'],
+.status[data-state='connecting'] {
+  color: var(--gold);
+}
+.status[data-state='offline'],
+.status[data-state='outdated'] {
+  color: #ff9b8f;
+}
+.message {
+  margin: 8px auto 0;
+  max-width: 32rem;
+  text-align: center;
+  background: var(--panel);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.controls {
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+}
+.bet,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.controls button {
+  min-width: 64px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 241, 232, 0.35);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+}
+.controls button.primary,
+.actions button {
+  background: var(--gold);
+  color: #1b1b1f;
+  border-color: transparent;
+}
+.controls button:disabled {
+  opacity: 0.45;
+}
+.controls output {
+  min-width: 72px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+[hidden] {
+  display: none !important;
+}
+.notice {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--dim);
+}

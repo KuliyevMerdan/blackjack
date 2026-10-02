@@ -1,4 +1,5 @@
 dist/
+dist-perf/
 coverage/
 .turbo/
 pnpm-lock.yaml

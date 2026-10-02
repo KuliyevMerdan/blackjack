@@ -74,6 +74,14 @@ export interface ClientOptions {
   };
 }
 
+/**
+ * The connection as the player should see it (ROADMAP C1: connection states that are real UI):
+ * `connecting` before the first answer, `online` once one arrived, `retrying` while a request is
+ * being re-sent, `offline` when the retries ran out, and `outdated` when the server answered with
+ * something this client cannot read — a newer server, which a reload fixes.
+ */
+export type Status = 'connecting' | 'online' | 'retrying' | 'offline' | 'outdated';
+
 /** A reply whose events do not prove its snapshot. In dev, a server bug or a client one: loud. */
 export class InvariantError extends Error {
   override readonly name = 'InvariantError';
@@ -102,6 +110,8 @@ export class Client {
   private truth: Truth | null = null;
   private inFlight = false;
   private readonly listeners = new Set<(change: Change) => void>();
+  private readonly statusListeners = new Set<(status: Status) => void>();
+  private currentStatus: Status = 'connecting';
   private readonly storage: KeyValue;
   readonly sent: SentRounds;
 
@@ -120,6 +130,22 @@ export class Client {
   }
 
   /** Every replacement of the truth, in order. Returns the unsubscribe. */
+  get status(): Status {
+    return this.currentStatus;
+  }
+
+  /** Every change of connection status. Returns the unsubscribe. */
+  onStatus(listener: (status: Status) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => void this.statusListeners.delete(listener);
+  }
+
+  private setStatus(status: Status): void {
+    if (status === this.currentStatus) return;
+    this.currentStatus = status;
+    for (const listener of this.statusListeners) listener(status);
+  }
+
   subscribe(listener: (change: Change) => void): () => void {
     this.listeners.add(listener);
     return () => void this.listeners.delete(listener);
@@ -153,7 +179,10 @@ export class Client {
     });
     if (sent.kind === 'lost') return { kind: 'failed', reason: sent.reason };
     const reply = sessionReply.safeParse(sent.body);
-    if (!reply.success) return { kind: 'failed', reason: 'session reply did not parse' };
+    if (!reply.success) {
+      this.setStatus('outdated');
+      return { kind: 'failed', reason: 'session reply did not parse' };
+    }
     write(this.storage, TOKEN, reply.data.token);
     const { token: t, config, balance, commit, round } = reply.data;
     this.replace('open', { token: t, config, balance, commit, round }, []);
@@ -230,7 +259,10 @@ export class Client {
     if (sent.kind === 'lost') return { kind: 'failed', reason: sent.reason };
     if (sent.status === 200) {
       const reply = actionReply.safeParse(sent.body);
-      if (!reply.success) return { kind: 'failed', reason: 'reply did not parse' };
+      if (!reply.success) {
+        this.setStatus('outdated');
+        return { kind: 'failed', reason: 'reply did not parse' };
+      }
       const { round, events, balance, commit } = reply.data;
       if (this.options.dev === true) proves(decidedOn.round, events, round);
       this.replace('reply', { ...decidedOn, round, balance, commit }, events);
@@ -287,6 +319,7 @@ export class Client {
     let last = 'no attempt made';
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (attempt > 0) {
+        this.setStatus('retrying');
         // Equal jitter: half the backoff fixed, half random — retries from many clients spread out.
         const backoff = Math.min(maxMs, baseMs * 2 ** (attempt - 1));
         await this.options.sleep(backoff / 2 + (backoff / 2) * this.options.random());
@@ -299,10 +332,13 @@ export class Client {
         last = error.message;
         continue;
       }
-      if (!retryable(response))
+      if (!retryable(response)) {
+        if (this.currentStatus !== 'outdated') this.setStatus('online');
         return { kind: 'reply', status: response.status, body: response.body };
+      }
       last = `HTTP ${response.status}`;
     }
+    this.setStatus('offline');
     return { kind: 'lost', reason: last };
   }
 

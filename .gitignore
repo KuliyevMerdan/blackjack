@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-perf/
 coverage/
 .turbo/
 *.tsbuildinfo

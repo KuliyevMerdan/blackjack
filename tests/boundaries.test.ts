@@ -40,6 +40,7 @@ describe('dependency boundaries', () => {
     ['packages/client-core/src/illegal-react.ts', 'no-react'],
     ['packages/client-core/src/illegal-engine.ts', 'client-core-deps'],
     ['packages/client-core/src/__fixtures__/illegal-renderer.ts', 'client-core-test-deps'],
+    ['packages/director/src/illegal-engine.ts', 'director-deps'],
     ['apps/server/src/illegal-web.ts', 'nothing-imports-apps'],
     ['tools/sim/src/illegal-server.ts', 'sim-deps'],
     ['tools/sim/src/illegal-server.ts', 'nothing-imports-apps'],
@@ -55,6 +56,8 @@ describe('dependency boundaries', () => {
     'apps/web/src/legal.ts',
     'apps/web/src/verify/legal.ts',
     'packages/client-core/src/__fixtures__/legal-server.ts',
+    'packages/director/src/__fixtures__/legal-rounds.ts',
+    'packages/renderer/src/__fixtures__/legal-rounds.ts',
   ])('accepts %s', (fixture) => {
     expect(ruleNamesFor(fixture)).toEqual([]);
   });

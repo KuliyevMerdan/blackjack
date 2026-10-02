@@ -20,8 +20,10 @@ repository.
 > measured against the engine, and 3·10⁷ simulated rounds against the published edge
 > ([`docs/sim/`](docs/sim/README.md)). **C0 landed 2026-10-02**: `client-core` — the truth store,
 > one request in flight, retries under one `actionId`, conflicts taken as truth — converging every
-> hand of 1,000 through a network that drops, duplicates and restarts. Four units are still empty
-> shells, each already policed. **C1 — the table on screen — is next.**
+> hand of 1,000 through a network that drops, duplicates and restarts. **C1 landed 2026-10-02**:
+> the table on screen — `director` scripting every reply, `renderer` playing it with GSAP on Pixi's
+> clock, the decision gate and the beat-gated HUD; every skip lands on the picture a full watch
+> does. One unit (`tools/load`) is still an empty shell. **C2 — decisions — is next.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -83,7 +85,7 @@ nowhere to come from.
 
 ### Packages
 
-All thirteen exist since **S0**; the nine marked ✅ are written, the rest are empty shells — a
+All thirteen exist since **S0**; the twelve marked ✅ are written, the rest are empty shells — a
 `src/index.ts` naming its block, a build to `dist/`, and the dependency rules already applied. The
 right-hand column is the block that fills each.
 
@@ -96,10 +98,10 @@ right-hand column is the block that fills each.
 | `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }` with refusals as values; `view(state)` the only door to the wire (the hole card and server seed stay behind it); `replay(…)` for the verifier and the server's resume. Pure | ✅ S2 |
 | `packages/strategy` | basic strategy for the published rules, as a table (`ROWS`: hard, soft, pairs × ten up cards), and `recommend(hand, upcard, allowed)` — always one of `allowed`, falling back as a player would (double → hit, or stand on a soft 18; a split refused at four hands → the pair's total). Insurance never. Pure | ✅ S4 |
 | `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM**: `fetch`, timers, randomness and storage are handed in, so the browser, the load tool and the tests run the same code. `subscribe` gives every replacement of the truth as `(previous, events, next)`; dev mode asserts `fold(previous, events) == next` on every reply | ✅ C0 |
-| `packages/director` | `(previous snapshot, events, pace) → Beat[]` — the choreography as data. Pure, **no Pixi, no GSAP** | C1 |
-| `packages/renderer` | the table: Pixi v8 scene, generated card atlas, GSAP timelines on the Pixi ticker, plays `Beat[]`. **No protocol** | C1 |
+| `packages/director` | `direct(previous, events, next, balance, pace) → Script` — the choreography as data: beats with `at` and `ms`, each with the `Picture` after it and the HUD's balance by then. `pictureOf(round)` is the snap's picture; `NORMAL` / `TURBO` / `INSTANT` paces. Pure, **no Pixi, no GSAP** | ✅ C1 |
+| `packages/renderer` | the table: Pixi v8 scene, a card atlas drawn at boot (`Graphics` + `Text`, one texture, ≈100 ms at 3× DPR), GSAP on the Pixi ticker (`driveGsapFromTicker`). `Stage.render(picture)` is the snap path, `Stage.play(cues)` the animated one, `skip()` completes it. Declares its own `StagePicture` / `StageCue`; the director's types fit them, held together by the compiler in `apps/web`. **No protocol** | ✅ C1 |
 | `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production | ✅ S3 |
-| `apps/web` | Vite — the Pixi canvas, a DOM action bar and bet panel over it, the verification page | C1–C3 |
+| `apps/web` | Vite — the Pixi canvas, a DOM HUD, bet panel and action bar over it; `TableController` turns truth changes into scripts and computes the decision gate and the HUD from the playback's position. `scripts/perf.mjs` measures C1's done-when. The verification page comes in C3 | ◐ C1 (C2, C3 to come) |
 | `tools/sim` | basic strategy through the engine on worker threads, each round a fresh protocol shuffle: realised edge ± σ against the published figure, outcomes, how often each rule fires (`pnpm sim`); every pair cell's actions on common shoes (`pnpm sim -- --chart`). Exits 1 when a result does not hold | ✅ S4 |
 | `tools/load` | many sessions playing basic strategy against a running server, money audited | P0 |
 
@@ -146,10 +148,12 @@ Hard rules on top of the graph:
 - **`engine` takes the shoe as an argument** and does not import `fair` (`engine-deps`). The engine
   deals from an array; where the array came from is the server's business and the verifier's.
 - **The load tool plays over the wire** (`load-deps`): `client-core`, never the engine.
-- **`client-core`'s tests may build a fake server from the real engine** (`client-core-test-deps`):
-  `*.test.ts` and `src/__fixtures__/` may also reach `engine`, `fair` and `cards`, so the client is
-  tested against the real rules rather than a second copy of them; what it ships stays on
-  `protocol` + `money` (`client-core-deps`). Both proven by fixtures.
+- **Test code may play real rounds** (`client-core-test-deps`, `director-test-deps`,
+  `renderer-test-deps`): in `client-core`, `director` and `renderer`, `*.test.ts` and
+  `src/__fixtures__/` may also reach the engine and the shuffle (and, for the renderer, the director
+  and the protocol) — so a fake server, a script or a scene is tested against the real rules
+  rather than a second copy of them written for a test. What each ships keeps its allow-list. Both
+  sides proven by fixtures.
 - **No React anywhere** (`no-react`).
 - **Nothing imports `apps/*`** (`nothing-imports-apps`).
 - **No package may import from `../slots` or `../crash`** (`no-siblings`) — by relative path or by
@@ -225,7 +229,7 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 | Uniformity | χ² over 240,000 shuffles of four items (all 24 orders) and over 20,000 full shoes (one tagged card's position) — the rejection step proven by test, not assumed | ✅ S1 |
 | Engine | every transition and refusal on stacked shoes · `allowed` against an oracle written from §4.2 at every decision of 10,000 hands under random rule sets, and `act` accepting exactly it · 100,000 seeded hands of random legal play: every snapshot and event parsed, events folding to the snapshot, money conserved at every step · 10,000 hands replayed from their decisions alone | ✅ S2 |
 | Statistical | `tools/sim`: three runs of 10⁷ rounds, each within 3σ of the published 0.40622 % (pooled 0.448 % ± 0.021 %) · 110 pair cells, the chart's action best within 3σ in each · a 2,000-round run pinned to the unit for a fixed seed | ✅ S4 |
-| Choreography | `director`: every event sequence ends in its snapshot's picture; skip from any beat lands there too | C1 |
+| Choreography | `director`: every script of 5,000 random rounds ends in its snapshot's picture, the HUD climbing only on payouts · `renderer`: watching 150 rounds to the end and snapping draw the same table; skipping from every cue — and from halfway through it — of 60 rounds lands there too; 500 rounds leave one sprite per card and no tweens; a split moves the pair's card, never deals one · `apps/web`: the gate shut until the decision beat, the HUD gated by the settle beat · in Chromium (`perf.mjs`): 50 random skips equal to a fresh render | ✅ C1 |
 | Integration | 1,000 hands over real HTTP on SQLite: two tabs on one session, 15 % of replies lost and retried (byte-identical), two restarts mid-hand — the wallet equal to the sum of its rounds, every round verified from its seeds, every card dealt once · 10,000 hands scanned: no reply or log line carries a hole card or an unrevealed seed | ✅ S3 · P0 adds faults on the wire |
 | E2E | Playwright: a forced split into four hands with a double and a dealer bust, played through the real UI, then verified in the browser | P1 |
 
@@ -259,7 +263,9 @@ The server on its own: `pnpm --filter @blackjack/server dev` (tsx watch; `BJ_DEV
 `pnpm sim -- --hands 10000000` measures the realised edge (≈3 min on 12 threads; `--seed`,
 `--threads`); `pnpm sim -- --chart` measures every pair cell (≈45 s). Results: [`docs/sim/`](docs/sim/README.md).
 
-Still to come: `pnpm dev` (server + web, watch mode) with **C1**.
+`pnpm dev` runs the server (`BJ_DEV=on`) and Vite together; the page proxies `/api` and `/fair` to
+:8080. `pnpm --filter @blackjack/web perf` measures C1's done-when in Chromium — see
+[`ROADMAP.md`](ROADMAP.md) § C1 for the numbers and what headless Chromium can and cannot say.
 
 A pre-commit hook (husky → lint-staged) runs ESLint and Prettier over staged files. `turbo.json`
 sets `agentGuidance: false`: Turborepo ≥ 2.11 otherwise writes an `AGENTS.md` whenever it detects an
@@ -275,12 +281,13 @@ writing:
   first run. Probably chance (a 2σ excess happens about one time in twenty); the way to know is a
   10⁸ run, or per-situation EVs held against Wizard of Odds' appendix tables. Not yet done.
   ([`docs/sim/`](docs/sim/README.md))
-- **Pace.** How long a card travels, the pause before the dealer's draws, the gap between hands
-  settling — **C1** sets the numbers by feel and by a measured round length, and writes them down.
+- **A real phone.** C1's 60 fps is measured in Chromium on a desktop GPU (Metal) with the CPU
+  throttled 4× — a mobile *profile*, not a phone. Playwright's default headless shell has no GPU:
+  WebGL falls back to SwiftShader, rAF runs at 30 Hz idle or not, and native GL stalls show up as
+  50–90 ms long tasks with almost no JS in them; it measures the machine, not the table. A real
+  device, through remote debugging, is **P0**'s.
 - **Four split hands in portrait.** Four hands of up to six cards each, a dealer row and a shoe, on a
   phone held upright. A real layout problem, not a detail — **C2**.
-- **Card art.** Drawn at boot into an atlas by Pixi `Graphics` + text, or SVG rasterised once.
-  **C1** picks by measured boot time and sharpness at 3× DPR.
 - **The host.** The sibling projects run on Render's free tier: no disk, asleep after 15 idle
   minutes. Here an open round lives in SQLite; on a diskless host a restart drops open rounds and
   wallets together, which is honest for a demo but must be said. **P1** decides and writes an ADR.

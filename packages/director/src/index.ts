@@ -1,6 +1,17 @@
 /**
- * @blackjack/director — `(previous, events, pace) → Beat[]` — the choreography as data. No Pixi, no GSAP, no clock.
- *
- * Empty until **C1** (ROADMAP.md). The dependency rules already police it.
+ * @blackjack/director — the script: `(previous, events, pace) → beats with durations`, and the
+ * picture each ends in (ADR-0002). Pure — the choreography is a unit test.
  */
-export {};
+export {
+  EMPTY,
+  applyBeat,
+  pictureOf,
+  type Beat,
+  type Face,
+  type HandPicture,
+  type HandState,
+  type Picture,
+  type Result,
+} from './picture.js';
+export { NORMAL, TURBO, INSTANT, scaled, type Pace } from './pace.js';
+export { direct, type Cue, type Script } from './script.js';

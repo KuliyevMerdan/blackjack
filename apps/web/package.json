@@ -3,35 +3,33 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "build:perf": "vite build --mode perf --outDir dist-perf",
+    "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --config ../../config/vitest.package.ts"
+    "test": "vitest run --config ../../config/vitest.package.ts",
+    "perf": "node scripts/perf.mjs"
   },
   "dependencies": {
+    "@blackjack/cards": "workspace:*",
     "@blackjack/client-core": "workspace:*",
     "@blackjack/director": "workspace:*",
-    "@blackjack/renderer": "workspace:*",
-    "@blackjack/protocol": "workspace:*",
-    "@blackjack/money": "workspace:*",
-    "@blackjack/cards": "workspace:*",
+    "@blackjack/engine": "workspace:*",
     "@blackjack/fair": "workspace:*",
+    "@blackjack/money": "workspace:*",
+    "@blackjack/protocol": "workspace:*",
+    "@blackjack/renderer": "workspace:*",
     "@blackjack/strategy": "workspace:*",
-    "@blackjack/engine": "workspace:*"
+    "gsap": "catalog:",
+    "pixi.js": "catalog:"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@types/node": "^20",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }

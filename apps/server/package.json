@@ -18,7 +18,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --config ../../config/vitest.package.ts",
-    "dev": "tsx watch src/main.ts",
+    "dev": "BJ_DEV=${BJ_DEV:-on} tsx watch src/main.ts",
     "start": "node dist/main.js"
   },
   "dependencies": {

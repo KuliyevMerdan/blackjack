@@ -30,6 +30,19 @@ const mayOnlyDependOn = (where, name, ...allowed) => ({
   to: { path: WORKSPACE, pathNot: only(name, ...allowed) },
 });
 
+/** A unit whose shipped code keeps to `allowed` and whose test code may also reach `testsAlso`. */
+const withTestCode = (name, allowed, testsAlso) => [
+  {
+    ...mayOnlyDependOn('packages', name, ...allowed),
+    from: { path: `^packages/${name}/src/`, pathNot: TEST_CODE },
+  },
+  {
+    ...mayOnlyDependOn('packages', name, ...allowed, ...testsAlso),
+    name: `${name}-test-deps`,
+    from: { path: `^packages/${name}/src/(__fixtures__/|[^/]+\\.test\\.ts$)` },
+  },
+];
+
 module.exports = {
   forbidden: [
     {
@@ -52,26 +65,19 @@ module.exports = {
     mayOnlyDependOn('packages', 'engine', 'protocol', 'money', 'cards'),
     mayOnlyDependOn('packages', 'strategy', 'cards'),
     /**
-     * What `client-core` ships may reach only the contract and money. Its tests drive it against a
-     * fake server built from the real engine and shuffle — the client tested against the real
-     * rules, not against a second implementation of them written for a test — so test code alone
-     * gets the wider list.
+     * What `client-core` and `director` ship may reach only their allow-lists. Their tests need
+     * real rounds — a fake server for one, replies to script for the other — and get them from the
+     * real engine and shuffle rather than from a second copy of the rules written for a test. So
+     * test code alone (`*.test.ts`, `src/__fixtures__/`) gets the wider list.
      */
-    {
-      ...mayOnlyDependOn('packages', 'client-core', 'protocol', 'money'),
-      from: { path: '^packages/client-core/src/', pathNot: TEST_CODE },
-    },
-    {
-      ...mayOnlyDependOn('packages', 'client-core', 'protocol', 'money', 'engine', 'fair', 'cards'),
-      name: 'client-core-test-deps',
-      from: { path: '^packages/client-core/src/(__fixtures__/|[^/]+\\.test\\.ts$)' },
-    },
-    mayOnlyDependOn('packages', 'director', 'protocol', 'money', 'cards'),
+    ...withTestCode('client-core', ['protocol', 'money'], ['engine', 'fair', 'cards']),
+    ...withTestCode('director', ['protocol', 'money', 'cards'], ['engine', 'fair']),
     /**
      * `renderer` plays beats and does not know what a reply is — the seam that lets the table be
-     * tested without a server. Its allow-list leaving out `protocol` IS that rule.
+     * tested without a server. Its allow-list leaving out `protocol` IS that rule. Its tests play
+     * real rounds through the real director, so test code alone may reach those.
      */
-    mayOnlyDependOn('packages', 'renderer', 'cards'),
+    ...withTestCode('renderer', ['cards'], ['director', 'engine', 'fair', 'protocol', 'money']),
     mayOnlyDependOn('apps', 'server', 'engine', 'protocol', 'money', 'cards', 'fair'),
     mayOnlyDependOn(
       'apps',

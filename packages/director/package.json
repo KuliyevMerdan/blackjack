@@ -25,6 +25,8 @@
     "@blackjack/cards": "workspace:*"
   },
   "devDependencies": {
+    "@blackjack/engine": "workspace:*",
+    "@blackjack/fair": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

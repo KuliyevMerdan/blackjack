@@ -4,12 +4,13 @@ A **single-player blackjack table** — stake, deal, insurance under an ace, the
 and split to four hands until the dealer plays. Node + TypeScript on the server, PixiJS + GSAP in the
 browser, one HTTP request per decision.
 
-> ⚠️ **Status (2026-10-02): the table serves and is measured; nothing draws it yet.** **S0–S4**
-> and **C0** have landed — the workspace and its boundaries, the contracts, the round machine, the
-> server (proven over 1,000 hands with two tabs, lost replies and restarts), basic strategy with a
-> simulator (3·10⁷ rounds against the published 0.406 % house edge, [`docs/sim/`](docs/sim/README.md)),
-> and the client core that holds the truth through a hostile network. See
-> [`ROADMAP.md`](ROADMAP.md) — **C1**, the table on screen, is next.
+> ⚠️ **Status (2026-10-02): a round plays on screen; decisions beyond hit and stand get their
+> choreography next.** **S0–S4**, **C0** and **C1** have landed — the contracts, the round machine,
+> the server (proven over 1,000 hands with two tabs, lost replies and restarts), basic strategy and
+> a simulator ([`docs/sim/`](docs/sim/README.md)), the client core, and the table on screen: Pixi +
+> GSAP on one clock, a decision gate, a HUD that waits for the winning card, and a skip that always
+> lands on the truth. `pnpm dev` to play it locally. See [`ROADMAP.md`](ROADMAP.md) — **C2**,
+> decisions, is next.
 
 ## What makes it interesting to build
 

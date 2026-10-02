@@ -6,13 +6,17 @@ packages:
 # One version per tool, referenced from every package as `"catalog:"`. A single edit here moves the
 # whole workspace, and two packages on two versions of zod stops being possible.
 catalog:
+  '@playwright/test': 1.62.1
   '@types/better-sqlite3': ^7
   better-sqlite3: ^12
   fastify: ^5
+  gsap: ^3
   happy-dom: ^20
   pino: ^9
+  pixi.js: ^8
   tsx: ^4
   typescript: ^5
+  vite: ^8
   vitest: ^3
   zod: ^4
 

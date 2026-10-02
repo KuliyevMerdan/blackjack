@@ -17,12 +17,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --config ../../config/vitest.package.ts"
+    "test": "vitest run --config ../../config/vitest.pixi.ts"
   },
   "dependencies": {
-    "@blackjack/cards": "workspace:*"
+    "@blackjack/cards": "workspace:*",
+    "gsap": "catalog:",
+    "pixi.js": "catalog:"
   },
   "devDependencies": {
+    "@blackjack/director": "workspace:*",
+    "@blackjack/engine": "workspace:*",
+    "@blackjack/fair": "workspace:*",
+    "@blackjack/money": "workspace:*",
+    "@blackjack/protocol": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

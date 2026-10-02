@@ -21,6 +21,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      '**/dist-perf/**',
       '**/node_modules/**',
       '**/.turbo/**',
       'config/fixtures/**', // deliberately illegal — see config/fixtures/README.md
@@ -35,6 +36,26 @@ export default tseslint.config(
     languageOptions: {
       sourceType: 'commonjs',
       globals: { module: 'writable', require: 'readonly', __dirname: 'readonly' },
+    },
+  },
+  {
+    // Browser measurement scripts: Node drives Playwright, and the functions handed to
+    // `page.evaluate` run in the page — so both sets of globals are real here.
+    files: ['apps/web/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: Object.fromEntries(
+        [
+          'process',
+          'console',
+          'setTimeout',
+          'fetch',
+          'window',
+          'document',
+          'performance',
+          'requestAnimationFrame',
+          'PerformanceObserver',
+        ].map((name) => [name, 'readonly']),
+      ),
     },
   },
   {
