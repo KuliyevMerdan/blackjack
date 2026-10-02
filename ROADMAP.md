@@ -15,9 +15,9 @@ committed shoe, the presentation that lags the truth, the dependency rules — l
 > (Rule 1)**
 
 **S0 landed 2026-10-02** — the workspace, strict TypeScript, the dependency graph and purity rules
-enforced and proven against illegal fixtures, CI. The wire contract
-([`docs/protocol.md`](docs/protocol.md)) and both ADRs are pinned, so S1 shows ◐: its remaining boxes
-are implementation.
+enforced and proven against illegal fixtures, CI. **S1 landed 2026-10-02** — `money`, `cards`, `fair`
+and `protocol`: an unbiased shuffle pinned at 30 seed pairs by an independent Python implementation,
+the same shoe in Node and a DOM, and a schema for everything on the wire.
 
 ---
 
@@ -26,7 +26,7 @@ are implementation.
 | Block | Delivers | Gates on | Status |
 | --- | --- | --- | --- |
 | **S0** | Workspace, strict TS, boundary lint, purity tests, CI | — | ✅ (landed 2026-10-02) |
-| **S1** | `protocol` · `money` · `cards` · `fair` — the contracts everything reads | S0 | ◐ |
+| **S1** | `protocol` · `money` · `cards` · `fair` — the contracts everything reads | S0 | ✅ (landed 2026-10-02) |
 | **S2** | `engine` — the round machine, pure and headless | S1 | ☐ |
 | **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ☐ |
 | **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ☐ |
@@ -80,19 +80,30 @@ _2 days. Write this before anything moves on screen. Everything is downstream of
 - [x] **The two load-bearing decisions are ADRs** (2026-10-02) —
       [ADR-0001](docs/adr/ADR-0001-committed-shoe.md) (committed shoe, client seed, face-down never
       travels) and [ADR-0002](docs/adr/ADR-0002-presentation-lags-truth.md) (truth, script, stage).
-- [ ] `packages/money`: branded `Minor`, integer arithmetic, `Intl.NumberFormat` display, and a
-      `payout(stake, numerator, denominator)` that refuses an inexact result.
-- [ ] `packages/cards`: card codes, the canonical six-deck shoe, `value(cards) → { total, soft,
-      blackjack }`, ten-value equality for splits. Tested over every two- and three-card hand.
-- [ ] `packages/fair`: `commit`, the HMAC byte stream, the unbiased Fisher–Yates, `shoe(serverSeed,
+- [x] `packages/money`: branded `Minor`, integer arithmetic, `Intl.NumberFormat` display, and a
+      `payout(stake, numerator, denominator)` that refuses an inexact result — with `ratio` under
+      it and `half` for insurance, all three throwing `InexactAmountError` rather than rounding.
+- [x] `packages/cards`: card codes, the canonical six-deck shoe, `value(cards)`, ten-value equality
+      for splits. Tested against a brute-force oracle over every two-card hand and every three-card
+      hand of ranks. **Diverged:** `value` returns `natural`, not `blackjack` — an ace and a
+      ten-value as two cards is a blackjack only on a hand not born of a split, which `cards`
+      cannot know and the engine does.
+- [x] `packages/fair`: `commit`, the HMAC byte stream, the unbiased Fisher–Yates, `shoe(serverSeed,
       clientSeed)`. **Isomorphic** — SHA-256 and HMAC in plain TypeScript, a suite that runs in
-      happy-dom as well as Node.
-- [ ] Golden test: 30 pinned seed pairs → the first 20 cards each, computed by an independent
-      Python implementation. Plus a uniformity check: over 10⁶ shuffles, every card lands in every
-      position at the expected rate within tolerance — the rejection step is proven, not assumed.
-- [ ] `packages/protocol`: zod schemas + inferred types for all of §2, `GameConfig`, `Round`,
+      happy-dom as well as Node. 85 µs a shoe.
+- [x] Golden test: 30 pinned seed pairs → the first 20 cards each, and one whole shoe, computed by
+      [`packages/fair/golden/shuffle.py`](packages/fair/golden/shuffle.py) and rerun by
+      `tests/golden-fresh.test.ts` so the fixture cannot be edited by hand. **Diverged:** the
+      uniformity check is not 10⁶ full shoes (≈90 s at 85 µs) but χ² over 240,000 shuffles of four
+      items — every one of 24 orders — and over 20,000 full shoes for one tagged card's position,
+      plus `below` tested word by word at the rejection boundary for `n` = 3, 5 and 312. Three
+      mutations — no rejection, the loop one index short, an event row deleted from the document —
+      each turn a suite red.
+- [x] `packages/protocol`: zod schemas + inferred types for all of §2, `GameConfig`, `Round`,
       `Hand`, every event, the error envelope. `tests/protocol-doc.test.ts` holds the document's
-      tables and the schemas to the same list.
+      endpoint, event and error tables and the schemas to the same lists. The `round` schema checks
+      the invariants a snapshot can break on its own — face-down never travels, settled means
+      settled, `allowed` belongs to its phase — and `holeDealt` refuses a `card` by name.
 
 **Done when:** the golden test pins 30 shoes, `fair` produces the same shoe in both runtimes, and the
 schemas parse a hand-written fixture of every request, reply, event and error.

@@ -5,12 +5,14 @@ repository.
 
 ## Project status
 
-> ⚠️ **The workspace exists; the game does not.** **S0 landed 2026-10-02**: the pnpm + Turborepo
+> ⚠️ **The contracts exist; the game does not.** **S0 landed 2026-10-02**: the pnpm + Turborepo
 > workspace, strict TypeScript, the dependency graph and the purity rules enforced and *proven to
-> fire* against deliberately illegal fixtures, and CI running `pnpm check`. All thirteen units exist
-> as empty shells, each already policed. The wire contract ([`docs/protocol.md`](docs/protocol.md))
-> is pinned, ADR-0001 and ADR-0002 are accepted, and [`ROADMAP.md`](ROADMAP.md) maps the blocks.
-> **S1 — the contracts: `protocol`, `money`, `cards`, `fair` — is next.**
+> fire* against deliberately illegal fixtures, and CI running `pnpm check`. **S1 landed
+> 2026-10-02**: the four packages everything reads — `money` (exact or nothing), `cards` (the value
+> of a hand), `fair` (SHA-256, HMAC and an unbiased shuffle, pinned by an independent Python
+> implementation in Node and in a DOM), and `protocol` (every request, reply, event and error as a
+> zod schema, with the face-down invariant checked at the boundary). Nine units are still empty
+> shells, each already policed. **S2 — the round machine, `packages/engine` — is next.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -72,16 +74,16 @@ nowhere to come from.
 
 ### Packages
 
-All thirteen exist since **S0** as empty shells — a `src/index.ts` naming its block, a build to
-`dist/`, and the dependency rules already applied. The right-hand column is the block that fills
-each.
+All thirteen exist since **S0**; the four marked ✅ are written, the rest are empty shells — a
+`src/index.ts` naming its block, a build to `dist/`, and the dependency rules already applied. The
+right-hand column is the block that fills each.
 
 | Package | Responsibility | Block |
 | --- | --- | --- |
-| `packages/protocol` | zod schemas + inferred types for every request, reply and event in [`docs/protocol.md`](docs/protocol.md); the four-class error taxonomy | S1 |
-| `packages/money` | branded `Minor`, integer arithmetic, a `payout` that refuses an inexact result, `Intl.NumberFormat` display | S1 |
-| `packages/cards` | card codes, the canonical shoe, `value()` (hard/soft/blackjack). Pure, tiny, shipped to both sides | S1 |
-| `packages/fair` | commit, the HMAC byte stream, the unbiased Fisher–Yates. **Isomorphic** | S1 |
+| `packages/protocol` | zod schemas + inferred types for every request, reply and event in [`docs/protocol.md`](docs/protocol.md); the four-class error taxonomy with the class a function of the code; `ENDPOINTS`, `EVENT_TYPES`, `PUBLISHED_RULES`. The `round` schema refuses a snapshot that breaks a protocol invariant — a server seed or a second dealer card before settlement, an `allowed` outside its phase | ✅ S1 |
+| `packages/money` | branded `Minor`, integer arithmetic, `ratio` / `payout` / `half` that return an exact amount or throw `InexactAmountError` — never round, never floor — and `Intl.NumberFormat` display | ✅ S1 |
+| `packages/cards` | `Card` as the exact set of 52 two-character codes, `canonicalShoe(decks)`, `points`, `sameValue` (the split-by-value test), and `value(cards) → { total, soft, natural, bust }`. `natural` is an ace and a ten-value as two cards; whether that is a *blackjack* depends on whether the hand came from a split, which the engine knows. Pure, tiny, shipped to both sides | ✅ S1 |
+| `packages/fair` | SHA-256 and HMAC-SHA256 in plain TypeScript (a key's inner and outer states computed once, so each HMAC is two compressions), `commit`, `wordStream`, `below` (rejection), `shuffleInPlace`, `shoe(serverSeed, clientSeed)` — 85 µs a shoe. **Isomorphic**: the same suite passes in Node and happy-dom | ✅ S1 |
 | `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }`. Pure | S2 |
 | `packages/strategy` | basic strategy for the published rules, as a table, with the action it recommends for any `(hand, upcard, allowed)`. Pure | S4 |
 | `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM** | C0 |
@@ -201,8 +203,9 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 
 | Layer | What it proves | Block |
 | --- | --- | --- |
-| Unit | `cards.value` over every two- and three-card hand, `money` exactness, `fair` commit | S1 |
-| Golden | the first 20 cards for 30 pinned seed pairs never change — from an independent Python shuffle | S1 |
+| Unit | `cards.value` against a brute-force oracle over every two-card hand and every three-card hand of ranks; `money` exact at every ratio the game uses, refusing every inexact one; SHA-256 and HMAC against the FIPS 180-4 and RFC 4231 vectors; `below` rejecting exactly the words it must; the schemas refusing every invariant break | ✅ S1 |
+| Golden | the first 20 cards for 30 seed pairs, and all 312 for one, from [`packages/fair/golden/shuffle.py`](packages/fair/golden/shuffle.py) — Python's `hashlib` and `hmac`, written from the protocol document. `tests/golden-fresh.test.ts` reruns it and requires the committed fixture byte for byte, so the vectors cannot drift by hand | ✅ S1 |
+| Uniformity | χ² over 240,000 shuffles of four items (all 24 orders) and over 20,000 full shoes (one tagged card's position) — the rejection step proven by test, not assumed | ✅ S1 |
 | Engine | every legal transition, every illegal one refused, `allowed` exact at every decision, events fold to the snapshot, money conserved over 100,000 seeded hands with random legal play | S2 |
 | Statistical | `tools/sim`: basic strategy over ≥10⁷ hands, realised edge within 3σ of the published figure for these rules | S4 |
 | Choreography | `director`: every event sequence ends in its snapshot's picture; skip from any beat lands there too | C1 |
@@ -226,7 +229,7 @@ pnpm check
 | `pnpm build` | `tsc` to `dist/` per unit, in dependency order (Turborepo) |
 | `pnpm typecheck` | the root suites' tsconfig, then every unit's |
 | `pnpm test` | each unit's own `src/**/*.test.ts` (`config/vitest.package.ts`) |
-| `pnpm test:root` | `tests/` — the rules proven against `config/fixtures/` |
+| `pnpm test:root` | `tests/` — the rules proven against `config/fixtures/`, the protocol document held to the schemas, and the golden fixture held to its generator (needs `python3`, standard library only) |
 | `pnpm format` | Prettier. Markdown is excluded: the canon is hand-wrapped |
 
 Units resolve each other through their built `dist/` and package `exports`, ordered by Turborepo's

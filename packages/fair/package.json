@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "happy-dom": "catalog:"
   }
 }

@@ -1,6 +1,22 @@
 /**
- * @blackjack/money — branded `Minor` integer units, exact arithmetic, a `payout` that refuses an inexact result.
+ * @blackjack/money — the branded `Minor`, integer arithmetic, and display.
  *
- * Empty until **S1** (ROADMAP.md). The dependency rules already police it.
+ * Money is an integer count of minor units on both sides of the wire (docs/protocol.md §1). Every
+ * operation here either returns an exact safe integer or throws; none of them rounds, and none of
+ * them floors.
  */
-export {};
+export type { Minor } from './minor.js';
+export {
+  isMinor,
+  minor,
+  ZERO,
+  add,
+  sub,
+  sum,
+  compare,
+  ratio,
+  payout,
+  half,
+  InexactAmountError,
+} from './minor.js';
+export { formatMinor, type FormatOptions } from './format.js';

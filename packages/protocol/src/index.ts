@@ -1,6 +1,13 @@
 /**
- * @blackjack/protocol — zod schemas + inferred types for every request, reply and event in docs/protocol.md.
+ * @blackjack/protocol — the wire contract in docs/protocol.md, as zod schemas and the types they
+ * infer. Parsed at the boundary on both sides (CLAUDE.md § Other rules): the server does not trust
+ * the client, and the client does not trust the server either.
  *
- * Empty until **S1** (ROADMAP.md). The dependency rules already police it.
+ * The document leads and this package follows — they change together, in one commit, always.
  */
-export {};
+export * from './primitives.js';
+export * from './config.js';
+export * from './round.js';
+export * from './events.js';
+export * from './errors.js';
+export * from './api.js';

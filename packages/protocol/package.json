@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@blackjack/money": "workspace:*",
-    "@blackjack/cards": "workspace:*"
+    "@blackjack/cards": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:",
