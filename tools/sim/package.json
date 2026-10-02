@@ -1,0 +1,35 @@
+{
+  "name": "@blackjack/sim",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --config ../../config/vitest.package.ts"
+  },
+  "dependencies": {
+    "@blackjack/engine": "workspace:*",
+    "@blackjack/strategy": "workspace:*",
+    "@blackjack/fair": "workspace:*",
+    "@blackjack/cards": "workspace:*",
+    "@blackjack/money": "workspace:*",
+    "@blackjack/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

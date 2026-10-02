@@ -1,0 +1,457 @@
+# Wire protocol
+
+> **Status: pinned, not yet implemented.** This document is the contract; `packages/protocol`
+> will implement it in **S1** — a zod schema for every request, reply and event below, parsed at
+> the boundary on both sides. When the two disagree, this file is wrong and gets fixed in the same
+> change as the code — never the other way round.
+>
+> Transport is **HTTP + JSON**, one request per player decision. Blackjack is single-player and
+> turn-based: nothing happens at the table that the player did not ask for, so there is nothing to
+> push and no socket to keep alive (D1). Every game call is a `POST` that names its round version
+> and carries a client-generated idempotency key (§7).
+
+## 1. Invariants
+
+These hold for every request and reply. A change to any of them is an ADR, not an edit.
+
+1. **The server owns the cards.** The shoe is a pure function of a server seed committed before the
+   round and a client seed chosen after the commit ([ADR-0001](adr/ADR-0001-committed-shoe.md)).
+   No RNG runs during a round.
+2. **Face-down never travels.** The dealer's hole card and every card still in the shoe are absent
+   from every reply, event, error and log line until they are turned face up. The server seed is
+   absent until the round settles.
+3. **The server owns the money.** The client never computes a balance, a payout or a stake total.
+   Every reply that moves money carries the authoritative balance after it.
+4. **Money is integer minor units** (`Minor`) on both sides of the wire. Every stake is a multiple of
+   the table's `betUnit`, which is even, so every payout this game makes — 3:2, half-stake
+   insurance, 2:1 — is exact. Nothing rounds, anywhere (§4.4).
+5. **The server owns the rules.** Every round snapshot carries the `allowed` actions for the
+   decision in front of the player. The client offers exactly those and computes none itself.
+6. **Every reply carries the new snapshot and the events that produced it**
+   ([ADR-0002](adr/ADR-0002-presentation-lags-truth.md)). Applying the events, in order, to the
+   previous snapshot yields the new one exactly. The snapshot is the truth; the events are its
+   proof and the presentation's script.
+7. **Every game request names the version it was decided on** (`seq`) and carries a client-generated
+   `actionId`. A replayed `actionId` returns the original reply; a stale `seq` is a conflict, never
+   an action applied to a hand the player was not looking at (§7).
+8. **A client seed is never reused under a commit published after it was sent** (§3.1). A deal
+   refused for `COMMIT_MISMATCH` is re-sent with a fresh client seed.
+9. **Unknown fields are ignored.** Neither side fails on a field it does not understand; it fails on
+   a field it does understand with the wrong shape.
+
+## 2. Endpoints
+
+All bodies are JSON. Game calls carry `Authorization: Bearer <token>` from §2.1.
+
+| Method | Path | What |
+| --- | --- | --- |
+| `POST` | `/api/session` | open or resume a session — the full snapshot (§2.1) |
+| `POST` | `/api/deal` | place the stake and deal a round (§2.3) |
+| `POST` | `/api/act` | one player decision on the open round (§2.4) |
+| `GET` | `/api/round` | the open round, the balance and the next commit — resync (§2.5) |
+| `GET` | `/api/history` | the session's settled rounds, newest first (§2.6) |
+| `GET` | `/fair/rounds/:roundId` | a settled round's full record, **public**, no token (§3.4) |
+| `GET` | `/health` · `/ready` | liveness · readiness |
+
+### 2.1 `POST /api/session`
+
+```jsonc
+// request
+{ "token": "…"? }
+// reply
+{
+  "token": "…",            // the request's, or a new one with a fresh wallet if absent or unknown
+  "balance": 100000,
+  "config": GameConfig,    // §2.2
+  "commit": "9f2c…",       // SHA-256 of the next round's server seed, bare lowercase hex
+  "round": Round | null    // the open round, if one was left open — the entire resume story (§8)
+}
+```
+
+### 2.2 `GameConfig`
+
+```jsonc
+{
+  "currency": "EUR",       // display only — play money
+  "betUnit": 100,          // every stake is a multiple; even, so every payout is exact
+  "minBet": 100,
+  "maxBet": 10000,
+  "rules": {
+    "decks": 6,
+    "dealerHitsSoft17": false,
+    "blackjackPays": [3, 2],
+    "peek": true,             // dealer checks for blackjack under an ace or a ten-value
+    "insurance": true,
+    "doubleOn": "ANY_TWO",
+    "doubleAfterSplit": true,
+    "maxHands": 4,
+    "splitBy": "VALUE",       // any two ten-value cards split together
+    "resplitAces": false,
+    "hitSplitAces": false,    // each split ace takes exactly one card
+    "surrender": false,
+    "autoStandOn21": true
+  }
+}
+```
+
+`rules` is published, not negotiated: one deployment plays one rule set, the client words its table
+felt from it ("Dealer stands on soft 17 · Blackjack pays 3 to 2"), and the fairness record carries
+the rules its round was played under so the verifier replays the same game (§3.4).
+
+### 2.3 `POST /api/deal`
+
+```jsonc
+// request
+{
+  "actionId": "uuid",
+  "stake": 500,
+  "clientSeed": "a3f9…",   // 1–64 printable ASCII; the client's own random 16 bytes by default
+  "commit": "9f2c…"        // the commit the client was shown and chose its seed against
+}
+// reply: ActionReply (§2.7) — the round dealt, possibly already SETTLED (§4.3)
+```
+
+Refusals: `PLAYER` — `BET_OUT_OF_RANGE`, `BET_NOT_A_UNIT_MULTIPLE`, `INSUFFICIENT_FUNDS`,
+`BAD_CLIENT_SEED`; `CONFLICT` — `ROUND_OPEN` (with the open round), `COMMIT_MISMATCH` (with the
+current commit).
+
+### 2.4 `POST /api/act`
+
+```jsonc
+// request
+{
+  "actionId": "uuid",
+  "roundId": "…",
+  "seq": 3,                 // the snapshot version the player decided on
+  "action": "hit" | "stand" | "double" | "split" | "insurance" | "noInsurance"
+}
+// reply: ActionReply (§2.7)
+```
+
+The action applies to the round's `activeHand` (or, in `INSURANCE`, to the round). It must be in
+the snapshot's `allowed`; if it is not, the refusal is `PLAYER ACTION_NOT_ALLOWED` — which a
+correct client never sees, because it only offers `allowed`.
+
+### 2.5 `GET /api/round`
+
+```jsonc
+{ "round": Round | null, "balance": 100000, "commit": "9f2c…" }
+```
+
+The resync call: after a `CONFLICT`, after a network failure whose outcome is unknown and whose
+retry is not possible, and when a visible tab comes back after a long sleep.
+
+### 2.6 `GET /api/history?limit=30&before=<roundId>`
+
+```jsonc
+{ "rounds": [ { "roundId": "…", "settledAt": 1759400000000, "stake": 500, "totalStake": 1000,
+                "totalPayout": 2000, "dealer": ["KS","7H"], "hands": [["TD","9C"], ["TS","AH"]] } ] }
+```
+
+Settled rounds of this session only, at most 100 kept. Each links to its verification page.
+
+### 2.7 `ActionReply`, `Round` and `Hand`
+
+```jsonc
+// ActionReply
+{ "round": Round, "events": Event[], "balance": 99500, "commit": "9f2c…" }
+// `commit` is the next round's; it changes only in the reply that settles a round.
+
+// Round
+{
+  "roundId": "…",
+  "seq": 3,                         // 0 after the deal; +1 per accepted action
+  "phase": "INSURANCE" | "PLAYER" | "SETTLED",
+  "stake": 500,                     // the base stake
+  "commit": "…", "clientSeed": "…",
+  "dealer": { "cards": ["KS"], "holeHidden": true },
+  "hands": [Hand],                  // one, or up to rules.maxHands after splits
+  "activeHand": 0 | null,           // null outside PLAYER
+  "allowed": ["hit", "stand", "double"],
+  "insurance": null | { "stake": 250, "payout": 750? },  // stake 0 = declined
+  "totalStake": 500,                // everything at risk: hands + insurance
+  "totalPayout": 0?,                // SETTLED only
+  "serverSeed": "…"?,               // SETTLED only — the reveal
+  "forced": true?                   // dev only — a forced shoe; never verifiable (§9)
+}
+
+// Hand
+{
+  "cards": ["9H", "2C"],
+  "stake": 500,                     // doubled → twice the base
+  "doubled": false,
+  "fromSplit": false,
+  "state": "PLAYING" | "STOOD" | "BUST" | "BLACKJACK" | "DONE",
+  "outcome": "WIN" | "LOSE" | "PUSH" | "BLACKJACK"?,    // SETTLED only
+  "payout": 1000?                   // SETTLED only — the total returned, stake included
+}
+```
+
+A card is two characters, rank then suit: `A23456789TJQK` × `SHDC` (`"TD"` is the ten of
+diamonds). No totals travel: a hand's value is `cards.value()`, one pure function both sides ship
+(§4.1), and the display of "soft 17" is the client's reading of cards it was shown.
+
+`DONE` covers the hands that stop without a choice: 21 under `autoStandOn21`, a double (one card,
+then done), a split ace's single card.
+
+### 2.8 Events
+
+Each reply's `events` list everything that happened since the `seq` the request named, in the order
+it happened. They are the presentation's script and the snapshot's proof (invariant 6).
+
+| Event | Payload | Emitted |
+| --- | --- | --- |
+| `roundStarted` | `stake` | first in every deal |
+| `cardDealt` | `to: "dealer" \| number` (hand index), `card` | a face-up card leaves the shoe |
+| `holeDealt` | — | the dealer's face-down card — **no card** |
+| `insuranceOffered` | — | dealer shows an ace |
+| `insuranceDecided` | `stake` (0 = declined) | |
+| `dealerPeeked` | `blackjack: boolean` | under an ace (after insurance) or a ten-value |
+| `handSplit` | `hand`, `newHand`, `stake` | the second card moves to `newHand`; its cards follow as `cardDealt` |
+| `handDoubled` | `hand`, `stake` | the extra stake; the one card follows as `cardDealt` |
+| `handStood` | `hand` | a stand, or an automatic one (`DONE`) |
+| `handBusted` | `hand` | |
+| `activeHandChanged` | `hand: number \| null` | |
+| `holeRevealed` | `card` | the turn |
+| `handSettled` | `hand`, `outcome`, `payout` | per hand, left to right |
+| `insuranceSettled` | `payout` | |
+| `roundSettled` | `totalPayout`, `serverSeed` | last in every settling reply |
+
+## 3. The shoe
+
+### 3.1 Commit and seeds
+
+- `serverSeed`: 32 bytes from a CSPRNG, drawn for the **next** round when the previous one settles
+  (or when a session opens). On the wire as 64 lowercase hex characters, revealed at settlement.
+- `commit = SHA-256(serverSeed)` over the 32 raw bytes, as bare lowercase hex. Published in the
+  session reply, in `GET /api/round`, and as `commit` in every `ActionReply`.
+- `clientSeed`: 1–64 printable ASCII characters (`0x20–0x7E`), sent with the deal together with the
+  commit it was chosen against. The client draws 16 random bytes as hex by default; a player may
+  type their own.
+- **A deal naming any commit but the session's current one is refused** (`CONFLICT
+  COMMIT_MISMATCH`, carrying the current commit). The client then **draws a fresh client seed** —
+  or, for a typed one, asks the player to confirm it — before re-sending. Re-sending the old seed
+  under a commit published after the server saw that seed would let the server choose its seed
+  against it (invariant 8).
+
+### 3.2 The shuffle
+
+1. **The canonical shoe.** For each of `decks` decks, suits in the order `S H D C`, ranks in the
+   order `A 2 3 4 5 6 7 8 9 T J Q K`: index 0 is `AS` of deck 0, index 311 is `KC` of deck 5.
+2. **The byte stream.** Block `k` (from 0) is `HMAC-SHA256(key = serverSeed bytes, message = UTF-8
+   of "<clientSeed>:<k>")`. The stream is block 0, block 1, …; it is read as consecutive big-endian
+   unsigned 32-bit words.
+3. **Fisher–Yates, unbiased.** For `i` from `311` down to `1`: let `n = i + 1` and
+   `limit = 2³² − (2³² mod n)`; read words until one is `< limit`; `j = word mod n`; swap positions
+   `i` and `j`. Rejection keeps every `j` exactly equally likely; without it, `2³² mod n ≠ 0` would
+   favour low indices.
+4. **Dealing** takes position 0, then 1, and so on.
+
+The shuffle is pinned by a golden test: 30 seed pairs and the first 20 cards each, computed by an
+independent Python implementation, never by the code under test.
+
+### 3.3 The dealing order
+
+Player, dealer (up), player, dealer (hole) — positions 0–3. Then, in the order the decisions call for
+them: a hit's card; a double's one card; after a split, the first new hand's second card, and the
+second hand's when it becomes active; then the dealer's draws. The position of every card a round
+used is therefore a function of the shoe and the decisions, which is what lets the verifier replay
+a round from `(serverSeed, clientSeed, decisions)` alone.
+
+### 3.4 `GET /fair/rounds/:roundId`
+
+Public, no token — the link from a settled round can be shared. Unsettled or unknown rounds are
+`404`.
+
+```jsonc
+{
+  "roundId": "…", "settledAt": 1759400000000,
+  "rules": { … },                    // as in GameConfig
+  "commit": "…", "serverSeed": "…", "clientSeed": "…",
+  "stake": 500,
+  "decisions": [ { "seq": 0, "action": "split" }, { "seq": 1, "action": "double" }, … ],
+  "dealt": ["9H","KS","9C","7D", …], // every card the round used, in shoe order
+  "round": Round                      // the final snapshot, as the player received it
+}
+```
+
+The verification page checks, each step shown:
+
+1. `SHA-256(serverSeed) == commit`;
+2. `commit` and `clientSeed` are the ones **this browser** sent and was shown, when it has them —
+   so the server cannot swap the record after the fact;
+3. the shuffle of `(serverSeed, clientSeed)` starts with `dealt`;
+4. replaying `decisions` through `engine` with `rules`, the shoe and the stake reproduces `round`
+   exactly — every card, every outcome, every payout.
+
+## 4. Rules and settlement
+
+The rules below are `GameConfig.rules` read out. `packages/engine` is their implementation and
+`tools/sim` their audit.
+
+### 4.1 Hand value
+
+Number cards count their pip, `T J Q K` count 10, an ace counts 11 unless that would bust the hand,
+then 1. A hand is **soft** when an ace is counting 11. **Blackjack** is an ace and a ten-value as
+the first two cards of a hand **not** born of a split; a split hand's 21 is 21.
+
+### 4.2 Round flow
+
+1. Deal (§3.3). The stake is debited.
+2. If the dealer shows an ace: phase `INSURANCE`. The player takes insurance (half the base stake,
+   debited) or declines. With a player blackjack, insurance is what other tables call even money.
+3. If the dealer shows an ace or a ten-value: the **peek**. Dealer blackjack ends the round:
+   the hole card turns, insurance pays, every hand settles against it.
+4. If the player has blackjack and the dealer does not: the round settles at once.
+5. Phase `PLAYER`, hand by hand from the left. `allowed` for the active hand:
+   - `stand` — always;
+   - `hit` — unless the hand is a split ace;
+   - `double` — on the hand's first two cards, not a split ace, and the balance covers the hand's
+     stake again; one card follows and the hand is `DONE`;
+   - `split` — on two cards of equal value, fewer than `maxHands` hands, not a split ace pair
+     (`resplitAces: false`), and the balance covers the stake again. Each hand takes a second card
+     when it becomes active; split aces take one card each and are `DONE`.
+   A hand that reaches 21 stands automatically; a hand over 21 is `BUST`.
+6. When no hand is `PLAYING`: the hole card turns. If any hand is not bust, the dealer draws to 17,
+   **standing on soft 17**. Then every hand settles, left to right.
+
+### 4.3 A round can settle in its deal reply
+
+Player blackjack against no dealer blackjack, and dealer blackjack under a ten-value, settle in the
+deal reply: its snapshot is `SETTLED` and its events run from `roundStarted` to `roundSettled`.
+Under an ace the round waits in `INSURANCE` first, in both cases.
+
+### 4.4 Payouts
+
+`payout` is what is returned to the player, stake included.
+
+| Outcome | `payout` |
+| --- | --- |
+| `LOSE` | `0` |
+| `PUSH` | `stake` |
+| `WIN` | `2 × stake` |
+| `BLACKJACK` | `stake + stake × 3 / 2` |
+| insurance, dealer blackjack | `3 × insurance stake` |
+| insurance, no dealer blackjack | `0` |
+
+`stake` is a multiple of an even `betUnit`, and insurance is half the base stake, so every entry is
+an integer. `money.payout` **refuses** an inexact result rather than rounding it: an inexact
+payout is a config bug, and it must fail where it is introduced.
+
+## 5. Round lifecycle
+
+```
+             deal
+  (none) ───────────▶ INSURANCE ──insurance/noInsurance──┐
+     ▲         │                                          ▼
+     │         ├──────────────────────────────────────▶ PLAYER ──hit/double/split/stand…──┐
+     │         │                                          │                                │
+     │         └─(blackjack either side, §4.3)─┐          └─(dealer blackjack on peek)─┐   │
+     │                                         ▼                                       ▼   ▼
+     └──────────────── next deal ─────────── SETTLED ◀──────────────────────────────────────┘
+```
+
+`DEALING` and the dealer's play are not phases: they happen inside one server step and reach the
+client as events. A round is open from its deal until `SETTLED`, with no timeout — a hand left open
+is waiting for the player, across reloads and server restarts.
+
+## 6. Errors
+
+```jsonc
+{ "error": { "class": "PLAYER" | "SESSION" | "CONFLICT" | "SYSTEM", "code": "…", "message": "…" },
+  "round": Round?, "balance": Minor?, "commit": "…"? }
+```
+
+| Class | HTTP | Meaning | Client reaction |
+| --- | --- | --- | --- |
+| `PLAYER` | 422 · 400 | The rules disallow it — `INSUFFICIENT_FUNDS`, `BET_OUT_OF_RANGE`, `BET_NOT_A_UNIT_MULTIPLE`, `BAD_CLIENT_SEED`, `ACTION_NOT_ALLOWED`, `MALFORMED` (400) | Say it in words; nothing changed |
+| `SESSION` | 401 | `UNKNOWN_SESSION` — token absent or not known | Open a session again, then resume |
+| `CONFLICT` | 409 | Your view is behind — `STALE_SEQ`, `ROUND_OPEN`, `NO_OPEN_ROUND`, `COMMIT_MISMATCH`, `ACTION_ID_REUSED` | Replace the truth with the attached state and render it; **do not retry the action** |
+| `SYSTEM` | 500 · 503 | `INTERNAL`, `UNAVAILABLE` | Retry with backoff under the **same** `actionId` |
+
+`CONFLICT` is a class of its own, not a `PLAYER` code, because its reaction is different: the
+player did nothing wrong, another tab or a lost reply moved the round, and the answer is to show the
+round as it now is. Every `CONFLICT` carries the state that resolves it.
+
+## 7. Idempotency and versions
+
+- **`actionId`** is generated by the client per *intent* — one press of Hit — and reused across every
+  retry of that intent. The server stores each session's replies by `actionId` for the open round
+  and the last settled one. A request with a known `actionId` returns **the stored reply**, whatever
+  has happened since. A known `actionId` with a different body is `ACTION_ID_REUSED`.
+- **`seq`** is the round's version: 0 after the deal, +1 per accepted action. A request whose `seq`
+  is not the round's is `STALE_SEQ`, with the round. Two tabs on one hand, a double tap that slipped
+  past the client, a retry after a reply that was lost *and* superseded — each lands here instead of
+  becoming a second card.
+- The order of checks is fixed: session → `actionId` replay → `seq` → rules. So a retry of an action
+  that succeeded is answered by its own reply, not by a conflict with the version it created.
+
+## 8. Recovery
+
+There is no recovery protocol. `POST /api/session` with the stored token returns the open round, and
+the client renders it as it stands — no replay, no catch-up animation
+([ADR-0002](adr/ADR-0002-presentation-lags-truth.md)). An action whose reply was lost is retried with
+the same `actionId`, which returns the reply it would have had. The server persists a round's seeds,
+decisions and snapshot in the same transaction as the money it moves, before replying, so a restart
+resumes every open round exactly.
+
+## 9. Environment & dev flags
+
+- **Forced shoe** (`BJ_DEV=on` only): `POST /api/deal` accepts `forceShoe: Card[]`, dealt from the
+  top before the shuffled shoe. The round is marked `forced: true`, its fairness record says so,
+  and the verifier reports it as *not verifiable* rather than verified. Production refuses the field
+  as `MALFORMED`. It exists for E2E: a split into four hands is not something to wait for.
+- **Fault injection** (`BJ_FAULTS=on`): per-session latency, dropped replies (the server applies the
+  action and closes the connection without answering) and `UNAVAILABLE` storms, exposed to the
+  network lab in the client (P0).
+
+## 10. Deliberately not in v1
+
+- More than one box per round. Splits already make up to four hands; three boxes would multiply the
+  layout problem without adding a new one.
+- Side bets (21+3, Perfect Pairs), surrender, a persistent shoe with penetration.
+- A shared table with other players. The sibling crash project is the real-time multiplayer one.
+- Real money, payments, crypto.
+
+## 11. Decision log
+
+Each entry is a question that was open, the answer, and the alternative that lost.
+
+**D1 — HTTP or a WebSocket?** HTTP. Single-player and turn-based: every change at the table is an
+answer to a request, so there is nothing to push, and a socket would add liveness, reconnect and
+ordering problems with nothing to show for them. Rejected: a socket for symmetry with the crash
+project.
+
+**D2 — Snapshot, events, or both in a reply?** Both. The snapshot is the truth a reload needs; the
+events carry the order a snapshot loses (which card came first after a split and a double).
+Rejected: snapshots only, with the client diffing (loses order); events only, with the client
+folding (makes the client's fold the truth). → [ADR-0002](adr/ADR-0002-presentation-lags-truth.md)
+
+**D3 — Who computes `allowed`?** The server, in every snapshot. Rejected: the client running the
+rules to light buttons — a second implementation is a second set of bugs, and a button the server
+would refuse is a lie on screen.
+
+**D4 — How are double actions stopped?** `seq` on every request plus `actionId` per intent.
+Rejected: client-side debouncing alone (two tabs, lost replies), `actionId` alone (a second Hit with
+a fresh id is a legitimate new intent to the server unless it names the version it was decided on).
+
+**D5 — Hash chain, or per-round commit with a client seed?** Per-round commit with a client seed —
+a single-player round can take a contribution from its only player. Rejected: the crash project's
+chain (it proves consistency, not that the seed was not picked for this player).
+→ [ADR-0001](adr/ADR-0001-committed-shoe.md)
+
+**D6 — A fresh shoe per round, or a persistent one?** Fresh. Rejected: penetration and a cut card —
+stateful verification, an edge that depends on depth.
+
+**D7 — Totals on the wire?** No. The value of a hand is a pure function of its visible cards, shipped
+to both sides in `cards`. Rejected: a server `total` field — it duplicates the cards and can disagree
+with them.
+
+**D8 — Split by rank or by value?** By value: `K` and `T` split. Common at online tables, and basic
+strategy never splits tens, so it barely touches the edge.
+
+**D9 — Auto-stand on 21?** Yes. Hitting 21 is never right; a button that is always wrong is not a
+choice. Rejected: offering it for fidelity to a real table, where it is a dealer's courtesy anyway.
+
+**D10 — How is the hole card represented before the turn?** `holeHidden: true` and no card. Rejected:
+a placeholder card code (`"XX"`), which every consumer must remember to special-case.
