@@ -7,8 +7,11 @@ import { expect, type Browser, type Page } from '@playwright/test';
 
 const errors = new WeakMap<Page, string[]>();
 
-/** A stranger: a fresh browser with nothing stored, on the table in turbo. */
-export async function stranger(browser: Browser): Promise<Page> {
+/**
+ * A stranger: a fresh browser with nothing stored, on the table in turbo — and, with `reduced`,
+ * reduced motion too (both are the table's own settings, a link's `?turbo&reduced`).
+ */
+export async function stranger(browser: Browser, reduced = false): Promise<Page> {
   const context = await browser.newContext();
   const page = await context.newPage();
   const seen: string[] = [];
@@ -18,7 +21,7 @@ export async function stranger(browser: Browser): Promise<Page> {
     errors.set(p, seen);
     p.on('pageerror', (e) => seen.push(e.message));
   });
-  await page.goto('/?turbo');
+  await page.goto(reduced ? '/?turbo&reduced' : '/?turbo');
   await expect(page.locator('[data-status]')).toHaveText('Online', { timeout: 60_000 });
   return page;
 }

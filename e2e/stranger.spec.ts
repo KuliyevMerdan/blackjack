@@ -24,7 +24,9 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
   browser,
 }) => {
   const started = Date.now();
-  const page = await stranger(browser);
+  // Turbo and reduced motion, as a hurried player would set them: the pair is luck, ~1 hand in 7,
+  // and on a CI runner drawing WebGL in software a hand at the full pace takes seconds.
+  const page = await stranger(browser, true);
   const status = page.locator('[data-status]');
   let hands = 0;
   let pressed: string[] = [];
@@ -32,7 +34,8 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
   let before = 0;
 
   while (!broke) {
-    expect(hands, 'forty hands without a pair').toBeLessThan(40);
+    const waited = Math.round((Date.now() - started) / 1000);
+    expect(hands < 40 && waited < 100, `${hands} hands in ${waited} s and no pair yet`).toBe(true);
     hands += 1;
     before = await balanceOf(page);
     pressed = [];
