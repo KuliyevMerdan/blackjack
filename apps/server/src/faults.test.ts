@@ -68,10 +68,18 @@ describe('with BJ_FAULTS=on', () => {
   });
 
   it('a dropped reply was applied: the retry under the same actionId gets the stored reply', async () => {
-    const { call, player, set } = await up();
+    // A forced shoe, so the deal leaves a round open: one in twelve random deals settles at once
+    // (a blackjack, §4.3) and leaves `round: null` — which made this test fail one run in ten.
+    const { call, player, set } = await up({ BJ_FAULTS: 'on', BJ_DEV: 'on' });
     await set({ dropNext: 1 });
     const id = actionId();
-    const body = { actionId: id, stake: 500, clientSeed: clientSeed(), commit: player.commit };
+    const body = {
+      actionId: id,
+      stake: 500,
+      clientSeed: clientSeed(),
+      commit: player.commit,
+      forceShoe: ['9H', 'KS', '9C', '7D'],
+    };
     await expect(call('POST', '/api/deal', { body, token: player.token })).rejects.toThrow();
     // Applied: the round is open and the stake has left the wallet.
     const after = roundReply.parse((await call('GET', '/api/round', { token: player.token })).body);
