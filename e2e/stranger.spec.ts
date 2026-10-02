@@ -83,8 +83,12 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
         //    and offers the same move again, because it never happened.
         await toggle('online');
         await expect(status).toHaveText('Online', { timeout: 30_000 });
+        // Retrying, then Offline — and Online last. In between, as many rounds of asking as the
+        // network took to come back: the table kept trying while this browser was still cut off.
         const seen: unknown = await page.evaluate(() => Reflect.get(window, 'seenStates'));
-        expect(seen).toEqual(['retrying', 'offline', 'online']);
+        const states = Array.isArray(seen) ? seen.map(String) : [];
+        expect([...states.slice(0, 2), states.at(-1)]).toEqual(['retrying', 'offline', 'online']);
+        expect(states.slice(2, -1).every((s) => s === 'retrying' || s === 'offline')).toBe(true);
         await expect(page.locator(`[data-action="${action}"]`)).toBeEnabled({ timeout: 15_000 });
         // 3. Now the other end breaks: the server applies the move and hangs up unanswered. The
         //    retry under the same id is answered from the stored reply — one move, not two.
