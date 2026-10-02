@@ -35,7 +35,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ✅ (landed 2026-10-02) |
 | **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ✅ (landed 2026-10-02) |
 | **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ✅ (landed 2026-10-02) |
-| **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ☐ |
+| **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ◐ |
 
 **Legend:** ☐ not started · ◐ in progress · ✅ landed (add the date, as `✅ (landed 2026-10-04)`).
 
@@ -493,17 +493,41 @@ mutant: 18 findings in a one-minute run.
 
 _1–2 days._
 
-- [ ] Deploy server + web from one image, one origin. The host decided in an ADR
-      ([`CLAUDE.md`](CLAUDE.md) § Gaps).
-- [ ] Playwright E2E in CI on a forced shoe: a split into four hands with a double, the dealer
-      busting, every payout asserted on screen and in the balance — then the round verified in the
-      browser. Plus a stranger spec that touches nothing but the page, runnable against the live
-      demo.
-- [ ] README with a GIF above the fold, the two ADRs in a paragraph each, the edge table from S4,
-      and a link anyone can follow to verify a hand.
-- [ ] `docs/architecture.md` — the request path, the transaction, and the one diagram of truth,
-      script and stage.
+- [x] **One image, one origin** (2026-10-02) — `BJ_STATIC_DIR` serves the production bundle from
+      `/` beside `/api` and `/fair` (no file can shadow a route; tested); the `Dockerfile` builds a
+      production server and page, and CI builds it, runs it and plays the stranger spec against it.
+      The host is Render's free tier, decided in [ADR-0003](docs/adr/ADR-0003-demo-host.md): no
+      disk, so every boot is a fresh table — and why nothing a browser kept from before a sleep
+      breaks. `render.yaml` deploys only commits CI passed.
+- [ ] **The live service** — the Blueprint connected on Render, and its URL.
+- [x] **Playwright E2E in CI** (2026-10-02), on an upright phone. `forced.spec`: three splits into
+      four hands, a double on 11, the dealer drawing to 25 — "Hand 1: 21, win, €20.00 back" and
+      the three €10.00 ones, "Staked €25.00 · returned €50.00", the balance €25 up; then the
+      verifier — commit, memory and replay ✓, the forced shoe `!`, verdict *not verifiable*: a
+      forced round is never called verified (§9), and that is what "verified in the browser" can
+      honestly mean for one. `stranger.spec`, nothing but the page: deal until a pair, split, go
+      offline with the next reply lost, press, see Reconnecting… then Online, verify — four ✓ and
+      the replay exactly the moves pressed; 10/10 runs locally, 12–36 s each.
+- [x] **README** (2026-10-02) — the GIF above the fold (`scripts/gif.mjs`, recorded from the forced
+      spec's shoe at the table's own pace), the two ADRs in a paragraph each, the edge table, and
+      "try to break it": play, split, break the lab, verify from the history — the link it gives is
+      shareable for as long as the boot that dealt it lasts (ADR-0003).
+- [x] **`docs/architecture.md`** (2026-10-02) — the request path as a sequence, the one transaction
+      and why a kill at any instant leaves no third state, truth · script · stage as one diagram.
 - [ ] The workspace README's row for this project: its status and the live demo link.
+
+Found on the way, and fixed in this block:
+
+- **A settled hand wiped by any resync** — a tab back in view, or a second tab's nudge, erased the
+  result on screen: `GET /api/round` names only an open round. `client-core` now keeps the settled
+  round while the wallet and the commit say nothing has happened since.
+- **Offline was a place to stay.** CI's first run of the stranger against the image ran its retries
+  out (an outage, then a lost reply on the last try) and sat on *Offline* with the move already
+  applied. The table now keeps asking where the round is until it hears, and lands on it.
+- **A phone held sideways** gets the controls in a column at the right and the felt beside them:
+  cards 51 px wide instead of the layout's 16 px floor.
+- **The lab** went on claiming "the next reply lost" after the server had spent it; it re-reads a
+  pending countdown after each move.
 
 **Done when:** a stranger can open the live link, play a hand with a split, break the network from
 the lab mid-hand, watch it recover with nothing lost, and verify the hand they just played — in

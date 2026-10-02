@@ -13,7 +13,8 @@
     "perf": "node scripts/perf.mjs",
     "decisions": "node scripts/decisions.mjs",
     "verify": "node scripts/verify.mjs",
-    "hardening": "node scripts/hardening.mjs"
+    "hardening": "node scripts/hardening.mjs",
+    "gif": "node scripts/gif.mjs"
   },
   "dependencies": {
     "@blackjack/cards": "workspace:*",

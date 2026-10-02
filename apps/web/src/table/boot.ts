@@ -6,6 +6,7 @@ import { feltWords } from '../rules.js';
 import { TableController } from './controller.js';
 import { intentOf } from './keys.js';
 import { mountLab, type Offline } from './lab.js';
+import { keepTrying } from './recover.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { TabSync } from './sync.js';
 import { chipLabel, money, mountUi } from './ui.js';
@@ -129,6 +130,10 @@ export async function bootTable(
   const config = client.state?.config;
   if (config) stage.setFelt(feltWords(config.rules));
   mountLab(uiHost, client, offline);
+  keepTrying(client, {
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    visible: () => !document.hidden,
+  });
   // Two tabs on one session keep in step (P0); a browser without the channel plays alone.
   if (typeof BroadcastChannel === 'function') new TabSync(client, new BroadcastChannel('bj:table'));
 

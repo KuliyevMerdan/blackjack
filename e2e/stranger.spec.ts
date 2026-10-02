@@ -73,11 +73,12 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
         await lab.click();
         await page.locator('[data-fault="offline"]').uncheck();
         await lab.click();
+        // If the outage outlasted the retries, the pill said Offline — and the table kept asking
+        // where the round is until it heard. Either way it ends Online, by itself.
         await expect(status).toHaveText('Online', { timeout: 30_000 });
-        expect(await page.evaluate(() => Reflect.get(window, 'seenStates'))).toEqual([
-          'retrying',
-          'online',
-        ]);
+        const seen: unknown = await page.evaluate(() => Reflect.get(window, 'seenStates'));
+        expect(Array.isArray(seen) && seen[0]).toBe('retrying');
+        expect(Array.isArray(seen) && seen.at(-1)).toBe('online');
         // …and the lab no longer claims a fault the server has spent.
         await expect(page.locator('[data-lab-state]')).toHaveText('No faults.');
       } else {

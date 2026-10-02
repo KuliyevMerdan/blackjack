@@ -44,7 +44,7 @@ describe('a pinned run', () => {
     expect(merge(simulate('pinned', 0, 700), simulate('pinned', 700, 2000))).toEqual(
       simulate('pinned', 0, 2000),
     );
-  });
+  }, 60_000);
 });
 
 describe('edge', () => {

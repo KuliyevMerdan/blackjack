@@ -5,7 +5,7 @@ repository.
 
 ## Project status
 
-> ⚠️ **The game is whole and hardened — faults, two tabs, kills; the deploy is next.**
+> ⚠️ **The game is whole, hardened and packaged — one image, E2E in CI; the live link is next.**
 > **S0 landed 2026-10-02**: the pnpm + Turborepo workspace, strict TypeScript, the dependency graph
 > and the purity rules enforced and *proven to fire* against deliberately illegal fixtures, and CI
 > running `pnpm check`. **S1 landed 2026-10-02**: the four packages everything reads — `money`
@@ -35,7 +35,11 @@ repository.
 > injected per session (a lost reply after the move applied, refusals, latency) and a network lab to
 > drive them; two tabs kept in step; a hidden tab drawn as it stands; and a 200-session, 30-minute
 > soak with faults on and the server SIGKILLed under it, audited over the wire. **P1 — packaging —
-> is next.**
+> is in progress**: one Docker image serving the API and the page from one origin, a Render
+> Blueprint ([ADR-0003](docs/adr/ADR-0003-demo-host.md): no disk, a fresh table each boot),
+> Playwright E2E in CI — a forced four-hand split paid to the cent, and a stranger who splits,
+> breaks the network and verifies, against the built image too — the README with its GIF, and
+> [`docs/architecture.md`](docs/architecture.md). Waiting on the Render service and the live link.
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -108,11 +112,11 @@ that filled each.
 | `packages/fair` | SHA-256 and HMAC-SHA256 in plain TypeScript (a key's inner and outer states computed once, so each HMAC is two compressions), `commit`, `wordStream`, `below` (rejection), `shuffleInPlace`, `shoe(serverSeed, clientSeed)` — 85 µs a shoe. **Isomorphic**: the same suite passes in Node and happy-dom | ✅ S1 |
 | `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }` with refusals as values; `view(state)` the only door to the wire (the hole card and server seed stay behind it); `replay(…)` for the verifier and the server's resume. Pure | ✅ S2 |
 | `packages/strategy` | basic strategy for the published rules, as a table (`ROWS`: hard, soft, pairs × ten up cards), and `recommend(hand, upcard, allowed)` — always one of `allowed`, falling back as a player would (double → hit, or stand on a soft 18; a split refused at four hands → the pair's total). Insurance never. Pure | ✅ S4 |
-| `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync; `onBusy` for a request the screen did not make; `faults()` for the lab when the session says `lab`; two reads beside the game — `history()` and the public `fairRecord(roundId)` — that take no turn and change no truth. **No DOM**: `fetch`, timers, randomness and storage are handed in, so the browser, the load tool and the tests run the same code. `subscribe` gives every replacement of the truth as `(previous, events, next)`; dev mode asserts `fold(previous, events) == next` on every reply | ✅ C0 |
+| `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync (which keeps a settled round on screen while nothing has moved since — `GET /api/round` names only an open one); `onBusy` for a request the screen did not make; `faults()` for the lab when the session says `lab`; two reads beside the game — `history()` and the public `fairRecord(roundId)` — that take no turn and change no truth. **No DOM**: `fetch`, timers, randomness and storage are handed in, so the browser, the load tool and the tests run the same code. `subscribe` gives every replacement of the truth as `(previous, events, next)`; dev mode asserts `fold(previous, events) == next` on every reply | ✅ C0 |
 | `packages/director` | `direct(previous, events, next, balance, pace) → Script` — the choreography as data: cues with `at`, a motion (`ms`) and the stillness after it (`hold`), each with the `Picture` after it and the HUD's balance by then. `pictureOf(round)` is the snap's picture; `NORMAL`, `REDUCED` (no motion, every hold kept) and `INSTANT` paces. Pure, **no Pixi, no GSAP** | ✅ C1 · C2 |
-| `packages/renderer` | the table: Pixi v8 scene, a card atlas drawn at boot (`Graphics` + `Text`, one texture, ≈100 ms at 3× DPR), GSAP on the Pixi ticker (`driveGsapFromTicker`). `Stage.render(picture)` is the snap path, `Stage.play(cues)` the animated one, `skip()` completes it; `propose()` is the one optimistic path — a Double's or Split's chips, withdrawable — and `setSpeed()` is turbo. Stakes as chip stacks, the active hand ringed and the rest dimmed, the peek's lift. `layout(width, height, shape, insets)` puts more than two hands in two rows on an upright phone. Declares its own `StagePicture` / `StageCue`; the director's types fit them, held together by the compiler in `apps/web`. **No protocol** | ✅ C1 · C2 |
-| `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production. With `BJ_FAULTS=on`, `faults.ts` breaks each session's own requests on its request (§9) — held, refused unapplied, or applied and its reply thrown away — around the table call, never inside it; allowed in production, for the live demo's lab | ✅ S3 · P0 |
-| `apps/web` | Vite — the Pixi canvas, a DOM HUD, bet panel (chips against the limits, `bet.ts`), action bar (keys in `keys.ts`) and settings over it; `TableController` turns truth changes into scripts, computes the decision gate and the HUD from the playback's position, sends a Double's or Split's chips at the press and withdraws them on anything but a reply, and words the table (`words.ts`) for the line over the bar and a live region. The history (☰), the rules and how it works (*i*), basic strategy's hint. **`#/verify/:roundId`** is a second page, loaded on demand: `src/verify/verify.ts` holds a public record to §3.4's four checks with `fair` and `engine` — the only place the web app reaches the engine — and `page.ts` shows them one by one. `scripts/perf.mjs`, `decisions.mjs` and `verify.mjs` measure C1's, C2's and C3's done-whens | ✅ C1 · C2 · C3 |
+| `packages/renderer` | the table: Pixi v8 scene, a card atlas drawn at boot (`Graphics` + `Text`, one texture, ≈100 ms at 3× DPR), GSAP on the Pixi ticker (`driveGsapFromTicker`). `Stage.render(picture)` is the snap path, `Stage.play(cues)` the animated one, `skip()` completes it; `propose()` is the one optimistic path — a Double's or Split's chips, withdrawable — and `setSpeed()` is turbo. Stakes as chip stacks, the active hand ringed and the rest dimmed, the peek's lift. `layout(width, height, shape, insets)` puts more than two hands in two rows on an upright phone, and beside a column of controls (`insets.right`) on one held sideways. Declares its own `StagePicture` / `StageCue`; the director's types fit them, held together by the compiler in `apps/web`. **No protocol** | ✅ C1 · C2 |
+| `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production. With `BJ_FAULTS=on`, `faults.ts` breaks each session's own requests on its request (§9) — held, refused unapplied, or applied and its reply thrown away — around the table call, never inside it; allowed in production, for the live demo's lab. `BJ_STATIC_DIR` serves the built web app from `/` beside the API — one origin (ADR-0003) | ✅ S3 · P0 · P1 |
+| `apps/web` | Vite — the Pixi canvas, a DOM HUD, bet panel (chips against the limits, `bet.ts`), action bar (keys in `keys.ts`) and settings over it; `TableController` turns truth changes into scripts, computes the decision gate and the HUD from the playback's position, sends a Double's or Split's chips at the press and withdraws them on anything but a reply, and words the table (`words.ts`) for the line over the bar and a live region. The history (☰), the rules and how it works (*i*), basic strategy's hint. **`#/verify/:roundId`** is a second page, loaded on demand: `src/verify/verify.ts` holds a public record to §3.4's four checks with `fair` and `engine` — the only place the web app reaches the engine — and `page.ts` shows them one by one. After the client's retries give up, `recover.ts` keeps asking where the round is until the server answers — Offline is never a place to stay. On a phone held sideways the controls stand in a column at the right. `scripts/perf.mjs`, `decisions.mjs` and `verify.mjs` measure C1's, C2's and C3's done-whens; `gif.mjs` records the README's GIF | ✅ C1 · C2 · C3 · P1 |
 | `tools/sim` | basic strategy through the engine on worker threads, each round a fresh protocol shuffle: realised edge ± σ against the published figure, outcomes, how often each rule fires (`pnpm sim`); every pair cell's actions on common shoes (`pnpm sim -- --chart`). Exits 1 when a result does not hold | ✅ S4 |
 | `tools/load` | `pnpm load`: a production-mode server on SQLite with faults on, many sessions on basic strategy through `client-core` (some with a twin tab), the server SIGKILLed every few minutes — then an audit over the wire alone: every wallet against its rounds, every accepted deal and decision against the server's records, every card dealt once, every round a tab was shown against the server's; latency percentiles per endpoint ([`docs/load/`](docs/load/README.md)) | ✅ P0 |
 
@@ -254,7 +258,7 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 | Soak | `pnpm load`: 200 sessions (20 with two tabs) for 30 minutes, faults on most of them, the server SIGKILLed every five minutes — audited over the wire to zero findings: wallets against rounds, every accepted move held and nothing beyond the moves whose fate no tab learned, no conflict in a one-tab session, every card once, every round shown the server's ([`docs/load/`](docs/load/README.md)). The audit caught an idempotency-off server mutant 18 times in a one-minute run | ✅ P0 |
 | Hardening (browser) | `hardening.mjs`: two tabs playing at once end on the server's round with every accepted action recorded once; a reply landing in a hidden tab drawn as it stands (caught as a mutant otherwise); a reload mid-split back as it stood; 3 s of latency and a lost reply driven from the lab; a SIGKILL with the page open — the press made while the server was down lands once | ✅ P0 |
 | Verification | `verify.ts` over a hundred honest rounds, and against six lies — a seed not committed, a seed and commit swapped together, a card swapped in the shoe and in the snapshot, a decision changed, another client seed — each failing at its step; a forced shoe never verified · the page in a DOM: steps, verdict, replay, a hostile client seed set as text · in Chromium (`verify.mjs`): a stranger's lost hand verified from its history link, a second stranger's view, four lies rewritten into the record in flight, all caught | ✅ C3 |
-| E2E | Playwright: a forced split into four hands with a double and a dealer bust, played through the real UI, then verified in the browser | P1 |
+| E2E | `e2e/`, Playwright on an upright phone (`pnpm e2e`): `forced.spec` — a forced pair split into four hands, one doubled, the dealer bust; every hand's payout in words, the totals and the balance asserted on screen; the verifier's commit, memory and replay passing and the forced shoe honestly not verified · `stranger.spec` — nothing but the page: deal until a pair, split, go offline with the next reply lost mid-hand, see Reconnecting… and Online, verify the hand — all four checks, the replay exactly the moves pressed, under two minutes. CI runs both against a development server, and the stranger against the built Docker image | ✅ P1 |
 
 ## Commands
 
@@ -294,6 +298,12 @@ The server on its own: `pnpm --filter @blackjack/server dev` (tsx watch; `BJ_DEV
 browser half of P0's (≈1 min). All four build the page in `--mode perf` and start their own server
 (`scripts/harness.mjs`); the frame monitor they share is `scripts/monitor.mjs`.
 
+`pnpm e2e` builds the server and the page and runs `e2e/` against a development server serving the
+production bundle from its own origin (`BJ_STATIC_DIR`); `E2E_BASE_URL=https://… pnpm e2e:live` runs
+the stranger alone against any deployed copy. `docker build -t blackjack .` is the image Render
+deploys (`render.yaml`); `pnpm --filter @blackjack/web gif` re-records `docs/media/table.gif` (needs
+`ffmpeg`).
+
 `pnpm load -- --sessions 200 --minutes 30` is P0's soak (`--twins`, `--faulted`, `--kill-every`,
 `--think`, `--report <file>`); `--sessions 20 --minutes 1` for a quick look. `BJ_FAULTS=on` on any
 server turns on `/api/faults` and the lab (⚡ in the HUD).
@@ -316,16 +326,8 @@ writing:
   throttled 4× — a mobile *profile*, not a phone. Playwright's default headless shell has no GPU:
   WebGL falls back to SwiftShader, rAF runs at 30 Hz idle or not, and native GL stalls show up as
   50–90 ms long tasks with almost no JS in them; it measures the machine, not the table. A real
-  device, through remote debugging, was **P0**'s and is still open: it needs a phone in hand, which
-  no script in this repository can stand in for. **P1**, before the live link goes in the README.
-- **A phone held sideways.** At 812 × 375 the measured band between the HUD and the controls is
-  ≈150 px — a dealer row and a row of hands with room for six cards each leave cards 16 px wide, the
-  layout's floor. Upright is solved (two rows of hands, C2); sideways wants the controls in a column
-  at the side and a left/right inset, or a "turn your phone" notice. **P1**, with the README's
-  screenshots.
-- **The host.** The sibling projects run on Render's free tier: no disk, asleep after 15 idle
-  minutes. Here an open round lives in SQLite; on a diskless host a restart drops open rounds and
-  wallets together, which is honest for a demo but must be said. **P1** decides and writes an ADR.
+  device, through remote debugging against the live link, needs a phone in hand, which no script in
+  this repository can stand in for. **P1**, once the live link is up.
 
 ## Rules
 
