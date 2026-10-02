@@ -133,27 +133,26 @@ export function mountUi(root: HTMLElement, handlers: Handlers): (view: View) => 
   const actions = $<HTMLElement>('[data-actions]');
   const announce = $<HTMLElement>('[data-announce]');
 
-  // One sheet open at a time, under the HUD; its button says whether it is.
-  const sheets = [...root.querySelectorAll<HTMLElement>('[data-sheet]')];
-  const openers = [...root.querySelectorAll<HTMLButtonElement>('[data-open]')];
-  for (const opener of openers) {
-    opener.addEventListener('click', () => {
-      const name = opener.dataset['open'];
-      for (const sheet of sheets) {
-        sheet.hidden = sheet.dataset['sheet'] !== name || !sheet.hidden;
-      }
-      for (const o of openers) {
-        const shown = sheets.some((sh) => sh.dataset['sheet'] === o.dataset['open'] && !sh.hidden);
-        o.setAttribute('aria-expanded', String(shown));
-      }
-      if (
-        name === 'history' &&
-        sheets.some((sh) => sh.dataset['sheet'] === 'history' && !sh.hidden)
-      ) {
-        void showHistory();
-      }
-    });
-  }
+  // One sheet open at a time, under the HUD; its button says whether it is. Delegated, so a sheet
+  // added later (the network lab) opens the same way.
+  root.addEventListener('click', (event) => {
+    const target = event.target;
+    const opener = target instanceof Element ? target.closest<HTMLElement>('[data-open]') : null;
+    if (opener === null) return;
+    const name = opener.dataset['open'];
+    const sheets = [...root.querySelectorAll<HTMLElement>('[data-sheet]')];
+    for (const sheet of sheets) sheet.hidden = sheet.dataset['sheet'] !== name || !sheet.hidden;
+    for (const o of root.querySelectorAll<HTMLElement>('[data-open]')) {
+      const shown = sheets.some((sh) => sh.dataset['sheet'] === o.dataset['open'] && !sh.hidden);
+      o.setAttribute('aria-expanded', String(shown));
+    }
+    if (
+      name === 'history' &&
+      sheets.some((sh) => sh.dataset['sheet'] === 'history' && !sh.hidden)
+    ) {
+      void showHistory();
+    }
+  });
   const showHistory = async () => {
     historyState.hidden = false;
     historyState.textContent = 'Loading…';

@@ -3,6 +3,7 @@ import {
   actionReply,
   errorReply,
   fairRecord,
+  faultsReply,
   fold,
   historyReply,
   roundReply,
@@ -11,6 +12,8 @@ import {
   type Action,
   type ErrorCode,
   type FairRecord,
+  type Faults,
+  type FaultsRequest,
   type GameConfig,
   type GameEvent,
   type Round,
@@ -121,7 +124,9 @@ export class Client {
   private inFlight = false;
   private readonly listeners = new Set<(change: Change) => void>();
   private readonly statusListeners = new Set<(status: Status) => void>();
+  private readonly busyListeners = new Set<(busy: boolean) => void>();
   private currentStatus: Status = 'connecting';
+  private labOn = false;
   private readonly storage: KeyValue;
   readonly sent: SentRounds;
 
@@ -139,9 +144,24 @@ export class Client {
     return this.inFlight;
   }
 
+  /** Whether the server injects faults on request (§9) — whether a network lab can do anything. */
+  get lab(): boolean {
+    return this.labOn;
+  }
+
   /** Every replacement of the truth, in order. Returns the unsubscribe. */
   get status(): Status {
     return this.currentStatus;
+  }
+
+  /**
+   * Every time a request starts or ends — whoever started it. A screen that greyed its buttons for
+   * a resync it did not ask for (another tab, a tab coming back into view) hears here that it may
+   * light them again. Returns the unsubscribe.
+   */
+  onBusy(listener: (busy: boolean) => void): () => void {
+    this.busyListeners.add(listener);
+    return () => void this.busyListeners.delete(listener);
   }
 
   /** Every change of connection status. Returns the unsubscribe. */
@@ -194,6 +214,7 @@ export class Client {
       return { kind: 'failed', reason: 'session reply did not parse' };
     }
     write(this.storage, TOKEN, reply.data.token);
+    this.labOn = reply.data.lab === true;
     const { token: t, config, balance, commit, round } = reply.data;
     this.replace('open', { token: t, config, balance, commit, round }, []);
     return { kind: 'ok' };
@@ -264,15 +285,15 @@ export class Client {
   // ── reading ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * This session's settled rounds, newest first (§2.6). A read: it changes no truth, takes no turn
+   * This session's settled rounds, newest first (§2.6); `before` pages back past a roundId. A read: it changes no truth, takes no turn
    * and may run while a game request is out — the history is a list beside the table, not a move.
    */
-  async history(limit = 30): Promise<Read<readonly RoundSummary[]>> {
+  async history(limit = 30, before?: string): Promise<Read<readonly RoundSummary[]>> {
     const truth = this.truth;
     if (truth === null) return { kind: 'failed', reason: 'no session yet' };
     const sent = await this.call({
       method: 'GET',
-      path: `/api/history?limit=${limit}`,
+      path: `/api/history?limit=${limit}${before === undefined ? '' : `&before=${before}`}`,
       token: truth.token,
     });
     if (sent.kind === 'lost') return { kind: 'failed', reason: sent.reason };
@@ -299,6 +320,32 @@ export class Client {
       return { kind: 'failed', reason: `the record answered ${sent.status} and did not parse` };
     }
     return { kind: 'ok', value: record.data };
+  }
+
+  /**
+   * Sets this session's injected faults (§9) — the network lab. Sent once, never retried: a lab that
+   * cannot reach the server has nothing to set, and its own request must not be the one it breaks.
+   */
+  async faults(patch: FaultsRequest): Promise<Read<Faults>> {
+    const truth = this.truth;
+    if (truth === null || !this.labOn) return { kind: 'unknown' };
+    let response: Response;
+    try {
+      response = await this.options.transport({
+        method: 'POST',
+        path: '/api/faults',
+        body: patch,
+        token: truth.token,
+      });
+    } catch (error) {
+      if (!(error instanceof TransportError)) throw error;
+      return { kind: 'failed', reason: error.message };
+    }
+    const reply = faultsReply.safeParse(response.body);
+    if (response.status !== 200 || !reply.success) {
+      return { kind: 'failed', reason: `the lab answered ${response.status}` };
+    }
+    return { kind: 'ok', value: reply.data };
   }
 
   // ── the request path ────────────────────────────────────────────────────────────────────
@@ -403,10 +450,12 @@ export class Client {
   private async exclusive(run: () => Promise<Outcome>): Promise<Outcome> {
     if (this.inFlight) return { kind: 'busy' };
     this.inFlight = true;
+    for (const listener of this.busyListeners) listener(true);
     try {
       return await run();
     } finally {
       this.inFlight = false;
+      for (const listener of this.busyListeners) listener(false);
     }
   }
 }

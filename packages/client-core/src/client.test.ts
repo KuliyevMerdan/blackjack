@@ -425,3 +425,56 @@ describe('reads', () => {
     expect(seen.every((s) => s.endsWith(' -'))).toBe(true); // no token on a public read
   });
 });
+
+describe('the network lab', () => {
+  const opened = (lab: boolean): Response => ({
+    status: 200,
+    body: {
+      token: 'a1'.repeat(32),
+      balance: 100_000,
+      config: CONFIG,
+      commit: 'ab'.repeat(32),
+      round: null,
+      ...(lab ? { lab: true } : {}),
+    },
+  });
+  const set = { latencyMs: 300, dropRate: 0, unavailableRate: 0, dropNext: 1, stormNext: 0 };
+
+  it('is there only when the server says so, and sets faults once, unretried', async () => {
+    let calls = 0;
+    const c = client(async (request) => {
+      if (request.path === '/api/session') return opened(true);
+      calls += 1;
+      return { status: 200, body: set };
+    });
+    await c.open();
+    expect(c.lab).toBe(true);
+    expect(await c.faults({ latencyMs: 300, dropNext: 1 })).toEqual({ kind: 'ok', value: set });
+    expect(calls).toBe(1);
+  });
+
+  it('a server without it: nothing is sent', async () => {
+    let calls = 0;
+    const c = client(async (request) => {
+      if (request.path === '/api/session') return opened(false);
+      calls += 1;
+      return { status: 404, body: null };
+    });
+    await c.open();
+    expect(c.lab).toBe(false);
+    expect((await c.faults({ dropNext: 1 })).kind).toBe('unknown');
+    expect(calls).toBe(0);
+  });
+});
+
+describe('busy', () => {
+  it('is announced as it starts and ends, whoever made the call', async () => {
+    const server = new FakeServer();
+    const c = client(server.transport);
+    const heard: boolean[] = [];
+    c.onBusy((b) => heard.push(b));
+    await c.open();
+    await c.resync();
+    expect(heard).toEqual([true, false, true, false]);
+  });
+});

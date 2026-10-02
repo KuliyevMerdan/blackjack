@@ -80,6 +80,7 @@ export class Table {
       config: this.config.game,
       commit: commitOf(session.serverSeed),
       round: session.openRound === null ? null : this.openRoundView(session),
+      ...(this.config.faults ? { lab: true as const } : {}),
     };
     return ok(reply);
   }
@@ -238,6 +239,11 @@ export class Table {
       round: view(state),
     };
     return ok(record);
+  }
+
+  /** Whether a token names a session — for routes outside the game, such as `/api/faults`. */
+  knows(token: string): boolean {
+    return this.store.session(token) !== null;
   }
 
   /** `/ready`: the store answers. */

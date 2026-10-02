@@ -5,7 +5,9 @@ import { Application } from 'pixi.js';
 import { feltWords } from '../rules.js';
 import { TableController } from './controller.js';
 import { intentOf } from './keys.js';
+import { mountLab, type Offline } from './lab.js';
 import { loadSettings, saveSettings } from './settings.js';
+import { TabSync } from './sync.js';
 import { chipLabel, money, mountUi } from './ui.js';
 
 /**
@@ -17,6 +19,7 @@ export async function bootTable(
   uiHost: HTMLElement,
   storage: KeyValue,
   client: Client,
+  offline: Offline,
 ): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   const stored = loadSettings(
@@ -82,7 +85,13 @@ export async function bootTable(
   const controls = uiHost.querySelector('.controls');
   if (controls !== null) new ResizeObserver(resize).observe(controls);
 
-  table = new TableController(client, stage, show, { settings }, money);
+  table = new TableController(
+    client,
+    stage,
+    show,
+    { settings, hidden: () => document.hidden },
+    money,
+  );
   show(table.view());
 
   // Skip: a tap on the felt or a key completes the timeline; a hidden tab returns to the end state.
@@ -107,12 +116,17 @@ export async function bootTable(
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) table?.skip();
+    // Back in view: ask where the round is — another tab, or a long sleep, may have moved it (§2.5).
+    else if (!client.busy) void client.resync();
   });
 
   await client.open();
   table.refresh(); // the open's change landed while the client was still busy
   const config = client.state?.config;
   if (config) stage.setFelt(feltWords(config.rules));
+  mountLab(uiHost, client, offline);
+  // Two tabs on one session keep in step (P0); a browser without the channel plays alone.
+  if (typeof BroadcastChannel === 'function') new TabSync(client, new BroadcastChannel('bj:table'));
 
   if (import.meta.env.MODE !== 'production') {
     // The probes' handle (scripts/perf.mjs, scripts/decisions.mjs). Not in a production build.

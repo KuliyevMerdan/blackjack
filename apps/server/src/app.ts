@@ -3,6 +3,7 @@ import { classOf, httpStatus, type ErrorReply } from '@blackjack/protocol';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
 import type { ServerConfig } from './config.js';
+import { Faults } from './faults.js';
 import { registerRoutes } from './http.js';
 import type { Store } from './store/store.js';
 import { Table } from './table.js';
@@ -53,14 +54,15 @@ export function createServer(deps: ServerDeps): Server {
   });
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'no such route' }));
 
-  registerRoutes(app, { config, table });
+  const faults = config.faults ? new Faults() : null;
+  registerRoutes(app, { config, table, faults });
 
   return {
     app,
     table,
     async listen() {
       const address = await app.listen({ host: config.host, port: config.port });
-      log.info({ address, env: config.env, dev: config.dev }, 'listening');
+      log.info({ address, env: config.env, dev: config.dev, faults: config.faults }, 'listening');
       return address;
     },
     async close() {

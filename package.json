@@ -19,7 +19,8 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "sim": "turbo run build --filter=@blackjack/sim... --output-logs=errors-only && node tools/sim/dist/main.js",
-    "dev": "turbo run dev --filter=@blackjack/server --filter=@blackjack/web"
+    "dev": "turbo run dev --filter=@blackjack/server --filter=@blackjack/web",
+    "load": "turbo run build --filter=@blackjack/load... --filter=@blackjack/server... --output-logs=errors-only && node tools/load/dist/main.js"
   },
   "devDependencies": {
     "@blackjack/protocol": "workspace:*",

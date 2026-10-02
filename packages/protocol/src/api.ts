@@ -24,6 +24,7 @@ export const ENDPOINTS = [
   { method: 'GET', path: '/api/round' },
   { method: 'GET', path: '/api/history' },
   { method: 'GET', path: '/fair/rounds/:roundId' },
+  { method: 'POST', path: '/api/faults' },
   { method: 'GET', path: '/health' },
   { method: 'GET', path: '/ready' },
 ] as const;
@@ -36,6 +37,8 @@ export const sessionReply = z.object({
   config: gameConfig,
   commit: hash,
   round: round.nullable(),
+  /** §9: present, and `true`, when the server injects faults on request — the network lab may show. */
+  lab: z.literal(true).optional(),
 });
 
 // §2.3
@@ -76,6 +79,23 @@ export const roundSummary = z.object({
 });
 export const historyReply = z.object({ rounds: z.array(roundSummary).max(100) });
 
+// §9 — fault injection, per session, on a server started with BJ_FAULTS=on
+export const faults = z.object({
+  /** Held before every game request is handled. */
+  latencyMs: z.int().min(0).max(10_000),
+  /** The chance a deal's or act's reply is dropped — after the action was applied and stored. */
+  dropRate: z.number().min(0).max(0.9),
+  /** The chance a game request is answered `503 UNAVAILABLE`, unapplied. */
+  unavailableRate: z.number().min(0).max(0.9),
+  /** Drop the next N deal or act replies, whatever the rate. */
+  dropNext: z.int().min(0).max(20),
+  /** Answer the next N game requests `UNAVAILABLE` — a storm. */
+  stormNext: z.int().min(0).max(50),
+});
+/** Fields given replace the session's; fields left out keep theirs. The reply is all of them. */
+export const faultsRequest = faults.partial();
+export const faultsReply = faults;
+
 // §3.4
 export const decision = z.object({ seq, action });
 export const fairRecord = z.object({
@@ -103,3 +123,5 @@ export type RoundSummary = z.output<typeof roundSummary>;
 export type HistoryReply = z.output<typeof historyReply>;
 export type Decision = z.output<typeof decision>;
 export type FairRecord = z.output<typeof fairRecord>;
+export type Faults = z.output<typeof faults>;
+export type FaultsRequest = z.output<typeof faultsRequest>;

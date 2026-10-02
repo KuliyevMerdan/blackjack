@@ -16,6 +16,7 @@
 import { chromium } from '@playwright/test';
 import { recommend } from '@blackjack/strategy';
 import { startTable } from './harness.mjs';
+import { seen as monitored, watch } from './monitor.mjs';
 
 const HANDS = Number(process.env.BJ_HANDS ?? 30); // fewer for a quick look; the done-when is 30
 const LATENCY = 300;
@@ -87,57 +88,7 @@ await page.waitForFunction(
   },
 );
 
-// The monitor: one check per animation frame, in the page, against the truth the client holds.
-await page.evaluate(() => {
-  const { client, stage } = window.__bj;
-  const mon = { frames: 0, violations: [], prev: null, curr: client.state?.round ?? null };
-  window.__mon = mon;
-  client.subscribe(({ next }) => {
-    mon.prev = mon.curr;
-    mon.curr = next.round;
-  });
-  const counts = (round) => {
-    const m = new Map();
-    if (!round) return m;
-    for (const c of [...round.dealer.cards, ...round.hands.flatMap((h) => h.cards)]) {
-      m.set(c, (m.get(c) ?? 0) + 1);
-    }
-    return m;
-  };
-  const say = (what) => {
-    if (mon.violations.length < 20) mon.violations.push({ frame: mon.frames, ...what });
-  };
-  const check = () => {
-    mon.frames += 1;
-    const known = counts(mon.prev);
-    for (const [c, n] of counts(mon.curr)) known.set(c, Math.max(n, known.get(c) ?? 0));
-    const shown = new Map();
-    const table_ = stage.describe();
-    for (const { face } of [...table_.dealer, ...table_.hands.flat()]) {
-      if (face !== null) shown.set(face, (shown.get(face) ?? 0) + 1);
-    }
-    for (const [c, n] of shown) {
-      if (n > (known.get(c) ?? 0)) say({ ahead: c, shown: n, known: known.get(c) ?? 0 });
-    }
-    const round = client.state?.round ?? null;
-    // The stage's own word on whether the script has played — not the controller's gate, which is
-    // the thing under test.
-    const played = stage.position.done;
-    for (const button of document.querySelectorAll('[data-action]')) {
-      if (button.hidden || button.disabled) continue;
-      const action = button.dataset.action;
-      const ok = round !== null && round.allowed.includes(action) && !client.busy && played;
-      if (!ok) say({ lit: action, busy: client.busy, played, allowed: round?.allowed });
-    }
-    const deal = document.querySelector('[data-deal]');
-    if (!deal.disabled) {
-      const between = round === null || round.phase === 'SETTLED';
-      if (!between || client.busy || !played) say({ lit: 'deal', phase: round?.phase });
-    }
-    requestAnimationFrame(check);
-  };
-  requestAnimationFrame(check);
-});
+await watch(page);
 
 /** Waits until the screen offers something: a decision, or the next Deal. */
 const offered = () =>
@@ -232,10 +183,7 @@ for (hand = 0; hand < HANDS; hand += 1) {
   if (result.said !== null) seen.results += 1;
 }
 
-const mon = await page.evaluate(() => ({
-  frames: window.__mon.frames,
-  violations: window.__mon.violations,
-}));
+const mon = await monitored(page);
 await browser.close();
 stop();
 

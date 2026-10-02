@@ -17,6 +17,12 @@ export interface ServerConfig {
   readonly database: string;
   /** `BJ_DEV=on` — `forceShoe` on deals (docs/protocol.md §9). Never in production. */
   readonly dev: boolean;
+  /**
+   * `BJ_FAULTS=on` — sessions may inject faults into their own requests (§9). Allowed in production:
+   * a player can only break their own connection, with faults the protocol recovers from — it is
+   * how the live demo's network lab works.
+   */
+  readonly faults: boolean;
   readonly game: GameConfig;
   /** What a new session's wallet starts with — play money. */
   readonly startingBalance: Minor;
@@ -40,6 +46,7 @@ const env = z.object({
   PORT: int(8080),
   BJ_DB: z.string().optional(),
   BJ_DEV: z.enum(['on', 'off']).optional(),
+  BJ_FAULTS: z.enum(['on', 'off']).optional(),
   BJ_STARTING_BALANCE: int(100_000),
   BJ_MIN_BET: int(DEFAULT_GAME.minBet),
   BJ_MAX_BET: int(DEFAULT_GAME.maxBet),
@@ -88,6 +95,7 @@ export function readConfig(source: Record<string, string | undefined>): ServerCo
     port: e.PORT,
     database: e.BJ_DB ?? ':memory:',
     dev: (e.BJ_DEV ?? 'off') === 'on',
+    faults: (e.BJ_FAULTS ?? 'off') === 'on',
     game: game.data,
     startingBalance: minor(e.BJ_STARTING_BALANCE),
     logLevel: e.LOG_LEVEL,

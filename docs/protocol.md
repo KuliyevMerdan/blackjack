@@ -65,6 +65,7 @@ Identifiers have one shape each:
 | `GET` | `/api/round` | the open round, the balance and the next commit — resync (§2.5) |
 | `GET` | `/api/history` | the session's settled rounds, newest first (§2.6) |
 | `GET` | `/fair/rounds/:roundId` | a settled round's full record, **public**, no token (§3.4) |
+| `POST` | `/api/faults` | this session's injected faults — a server with `BJ_FAULTS=on` only (§9) |
 | `GET` | `/health` · `/ready` | liveness · readiness |
 
 ### 2.1 `POST /api/session`
@@ -78,7 +79,8 @@ Identifiers have one shape each:
   "balance": 100000,
   "config": GameConfig,    // §2.2
   "commit": "9f2c…",       // SHA-256 of the next round's server seed, bare lowercase hex
-  "round": Round | null    // the open round, if one was left open — the entire resume story (§8)
+  "round": Round | null,   // the open round, if one was left open — the entire resume story (§8)
+  "lab": true?             // the server injects faults on request (§9): the network lab may show
 }
 ```
 
@@ -439,9 +441,27 @@ resumes every open round exactly.
   deals with a schema that does not have the field, so it is dropped like any unknown field
   (invariant 9) and a forced shoe cannot reach a production round. It exists for E2E: a split into
   four hands is not something to wait for.
-- **Fault injection** (`BJ_FAULTS=on`): per-session latency, dropped replies (the server applies the
-  action and closes the connection without answering) and `UNAVAILABLE` storms, exposed to the
-  network lab in the client (P0).
+- **Fault injection** (`BJ_FAULTS=on`): each session may ask the server to misbehave **towards it
+  alone** — the network lab in the client drives it, on the live demo too.
+
+  ```jsonc
+  // POST /api/faults (Bearer token) — fields given replace the session's, the rest are kept
+  { "latencyMs": 800, "dropRate": 0.2, "unavailableRate": 0, "dropNext": 1, "stormNext": 0 }
+  // reply: all five, as they now stand
+  ```
+
+  | Fault | Applies to | What happens |
+  | --- | --- | --- |
+  | `latencyMs` (0–10,000) | deal, act, round, history | the request waits before it is handled |
+  | `unavailableRate` (0–0.9), `stormNext` (0–50) | deal, act, round, history | answered `503 UNAVAILABLE` and **not applied**; `stormNext` counts down the next N |
+  | `dropRate` (0–0.9), `dropNext` (0–20) | deal, act | **applied, stored, and then the connection is closed with no reply** — the lost reply §7 exists for; `dropNext` counts down the next N |
+
+  The session's own requests are the only ones touched, so a server may run with faults on in
+  production: a player can only break their own connection, and every fault is one the protocol
+  already recovers from — `SYSTEM` and silence are retried under the same `actionId` (§6, §7).
+  Faults live in the server's memory: a restart clears them. Opening a session and `/fair` are
+  never faulted — the lab needs a session to set them, and a verification link must always work.
+  Without `BJ_FAULTS=on` the route does not exist (`404`) and the session reply has no `lab`.
 
 ## 10. Deliberately not in v1
 
@@ -493,3 +513,9 @@ choice. Rejected: offering it for fidelity to a real table, where it is a dealer
 
 **D10 — How is the hole card represented before the turn?** `holeHidden: true` and no card. Rejected:
 a placeholder card code (`"XX"`), which every consumer must remember to special-case.
+
+**D11 — Where do injected faults live?** On the server, per session, set over the wire. A dropped
+reply must be dropped *after* the action applied — the one failure a client cannot fake for itself —
+and a live demo's lab must break only the visitor's own table. Rejected: a fault proxy in front of
+the server (cannot reach a live demo's per-visitor connection, and cannot know a request applied);
+faults in the client alone (can lose a request, never a reply).

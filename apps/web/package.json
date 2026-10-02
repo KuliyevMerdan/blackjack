@@ -12,7 +12,8 @@
     "test": "vitest run --config ../../config/vitest.package.ts",
     "perf": "node scripts/perf.mjs",
     "decisions": "node scripts/decisions.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "hardening": "node scripts/hardening.mjs"
   },
   "dependencies": {
     "@blackjack/cards": "workspace:*",

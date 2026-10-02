@@ -140,6 +140,9 @@ function server(answer: ActAnswer, options: { gate?: Promise<void>; balance?: nu
         body: { round: DEALT, events: DEAL_EVENTS, balance: 99_500, commit: COMMIT },
       };
     }
+    if (path === '/api/round') {
+      return { status: 200, body: { round: DEALT, balance: 99_500, commit: COMMIT } };
+    }
     seen.acts += 1;
     await options.gate;
     const action = typeof body === 'object' && body !== null && 'action' in body ? body.action : '';
@@ -607,5 +610,44 @@ describe('the strategy hint', () => {
     });
     await table.deal();
     expect(last().hint).toBeNull();
+  });
+});
+
+describe('a hidden tab', () => {
+  it('draws a reply as it stands — no script waiting for frames the browser will not give', async () => {
+    const stage = new HeldStage();
+    const { transport } = server('reply');
+    const client = new Client({
+      transport,
+      sleep: async () => {},
+      random: () => 0.5,
+      uuid: () => '00000000-0000-4000-8000-000000000003',
+      clientSeed: () => 'seed',
+    });
+    let hidden = true;
+    const views: View[] = [];
+    const table = new TableController(client, stage, (v) => views.push(v), {
+      hidden: () => hidden,
+    });
+    await client.open();
+    await table.deal();
+    expect(stage.cues).toEqual([]); // nothing played
+    expect(stage.rendered.at(-1)?.hands[0]?.cards).toEqual(['9H', '9C']);
+    expect(table.view().gateOpen).toBe(true);
+    expect(table.view().hud).toBe(99_500);
+    hidden = false;
+    await table.act('stand');
+    expect(stage.cues.length).toBeGreaterThan(0); // in view again: played
+  });
+});
+
+describe('a request the table did not make', () => {
+  it('greys the buttons while it is out, and lights them again when it ends', async () => {
+    const { table, last } = await dealt();
+    expect(last().actions).toContain('stand');
+    const resync = table['client'].resync(); // as another tab's news or a tab back in view does
+    expect(last().actions).toEqual([]);
+    await resync;
+    expect(last().actions).toContain('stand');
   });
 });

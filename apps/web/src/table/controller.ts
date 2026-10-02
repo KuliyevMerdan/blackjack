@@ -69,21 +69,31 @@ export class TableController {
   private message: string | null = null;
   private callout: string | null = null;
   private settings: Settings;
+  private readonly hidden: () => boolean;
   private readonly unsubscribe: (() => void)[] = [];
 
   constructor(
     private readonly client: Client,
     private readonly stage: StageLike,
     private readonly show: (view: View) => void,
-    options: { readonly settings?: Settings; readonly stake?: number } = {},
+    options: {
+      readonly settings?: Settings;
+      readonly stake?: number;
+      /** Whether the page is hidden — a reply landing then is drawn as it stands, not played. */
+      readonly hidden?: () => boolean;
+    } = {},
     private readonly format: (minor: number) => string = String,
   ) {
     this.settings = options.settings ?? { turbo: false, reducedMotion: false, hint: false };
     this.stake = options.stake ?? 500;
+    this.hidden = options.hidden ?? (() => false);
     this.stage.setSpeed(this.settings.turbo ? TURBO_SPEED : 1);
     this.unsubscribe.push(
       client.subscribe((change) => this.onChange(change)),
       client.onStatus(() => this.emit()),
+      // A request this controller did not make — another tab's resync, a tab back in view — greys
+      // the buttons while it is out; its end must light them again.
+      client.onBusy(() => this.emit()),
     );
   }
 
@@ -149,7 +159,9 @@ export class TableController {
   private onChange(change: Change): void {
     const { previous, next, events } = change;
     this.playback?.skip(); // a new truth supersedes whatever was still catching up
-    if (events.length === 0) {
+    // Nothing to animate — a resume, a resync, a conflict — or no one to watch it: a hidden tab's
+    // browser stops animation frames, and a script started there would wait and then play at once.
+    if (events.length === 0 || this.hidden()) {
       this.playback = null;
       this.hud = next.balance;
       this.stage.render(pictureOf(next.round));

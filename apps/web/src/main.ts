@@ -1,5 +1,6 @@
 import { Client, httpTransport, type KeyValue } from '@blackjack/client-core';
 import './styles.css';
+import { Offline } from './table/lab.js';
 import { money } from './table/ui.js';
 
 /**
@@ -16,8 +17,13 @@ const storage: KeyValue = {
   set: (key, value) => window.localStorage.setItem(key, value),
 };
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+// The network lab's "offline" switch sits in front of the transport, so the client meets it exactly
+// as it would meet a dead network.
+const offline = new Offline();
 const client = new Client({
-  transport: httpTransport({ baseUrl: '', fetch: (url, init) => fetch(url, init), sleep }),
+  transport: offline.wrap(
+    httpTransport({ baseUrl: '', fetch: (url, init) => fetch(url, init), sleep }),
+  ),
   sleep,
   random: Math.random,
   uuid: () => crypto.randomUUID(),
@@ -43,5 +49,5 @@ if (verifying?.[1] !== undefined) {
   });
 } else {
   const { bootTable } = await import('./table/boot.js');
-  await bootTable(stageHost, uiHost, storage, client);
+  await bootTable(stageHost, uiHost, storage, client, offline);
 }

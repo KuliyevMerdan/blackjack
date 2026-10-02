@@ -431,3 +431,29 @@ body.page #ui {
     animation: none;
   }
 }
+/* Buttons inside a sheet (the network lab): the bar's look, smaller. */
+.sheet button {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(244, 241, 232, 0.35);
+  background: rgba(244, 241, 232, 0.08);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+}
+.sheet button[aria-pressed='true'] {
+  background: var(--gold);
+  color: #1b1b1f;
+  border-color: transparent;
+}
+.lab .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.lab .hint-text {
+  color: var(--dim);
+  font-size: 0.8rem;
+}

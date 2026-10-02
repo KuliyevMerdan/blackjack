@@ -28,14 +28,16 @@ export async function until(fn, ms, what) {
  * `env` is the server's — `BJ_DEV: 'on'` for forced shoes. Returns the page's URL and the stop.
  */
 export async function startTable({ server, web, env = {} }) {
-  const children = [];
+  const children = new Set();
   const run = (args, extra, cwd = root) => {
     const child = spawn(process.execPath, args, {
       cwd,
       env: { ...process.env, ...extra },
       stdio: 'ignore',
     });
-    children.push(child);
+    children.add(child);
+    child.on('exit', () => children.delete(child));
+    return child;
   };
   const stop = () => children.forEach((c) => c.kill('SIGTERM'));
   process.on('exit', stop);
@@ -50,13 +52,16 @@ export async function startTable({ server, web, env = {} }) {
       code === 0 ? resolve() : reject(new Error(`vite build exited ${code}`)),
     );
   });
-  run(['apps/server/dist/main.js'], {
+  const serverEnv = {
     PORT: String(server),
     HOST: '127.0.0.1',
     LOG_LEVEL: 'warn',
     BJ_STARTING_BALANCE: '10000000',
     ...env,
-  });
+  };
+  const ready = () =>
+    until(() => fetch(`http://127.0.0.1:${server}/ready`).then((r) => r.ok), 20_000, 'the server');
+  let table = run(['apps/server/dist/main.js'], serverEnv);
   run(
     [
       vite,
@@ -72,11 +77,18 @@ export async function startTable({ server, web, env = {} }) {
     { BJ_SERVER: `http://127.0.0.1:${server}` },
     path.join(root, 'apps/web'),
   );
-  await until(
-    () => fetch(`http://127.0.0.1:${server}/ready`).then((r) => r.ok),
-    20_000,
-    'the server',
-  );
+  await ready();
   await until(() => fetch(`http://127.0.0.1:${web}/`).then((r) => r.ok), 20_000, 'the web preview');
-  return { url: `http://127.0.0.1:${web}/`, stop };
+  return {
+    url: `http://127.0.0.1:${web}/`,
+    api: `http://127.0.0.1:${server}`,
+    stop,
+    /** SIGKILL — no clean shutdown, whatever was in flight is cut off. */
+    kill: () => table.kill('SIGKILL'),
+    /** The server again, on the same environment (and the same database file, if it has one). */
+    restart: async () => {
+      table = run(['apps/server/dist/main.js'], serverEnv);
+      await ready();
+    },
+  };
 }

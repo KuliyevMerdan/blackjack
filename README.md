@@ -4,16 +4,15 @@ A **single-player blackjack table** — stake, deal, insurance under an ace, the
 and split to four hands until the dealer plays. Node + TypeScript on the server, PixiJS + GSAP in the
 browser, one HTTP request per decision.
 
-> ⚠️ **Status (2026-10-02): the game is whole on screen — play, history, and a verifier that runs in
-> your browser; hardening and the deploy come next.** **S0–S4** and **C0–C3** have landed — the
-> contracts, the round machine, the server (proven over 1,000 hands with two tabs, lost replies and
-> restarts), basic strategy and a simulator ([`docs/sim/`](docs/sim/README.md)), the client core,
-> and the table: Pixi + GSAP on one clock, a decision gate, splits to four hands that fit a phone
-> held upright, a Double's chips sent at the press and sent back on a refusal, keys and
-> screen-reader words for every decision, turbo and reduced motion, a strategy hint — and every
-> hand in the history links to a page that rebuilds its shoe and replays it through the same
-> engine, in the browser, catching a server that lies about any of it. `pnpm dev` to play it
-> locally. See [`ROADMAP.md`](ROADMAP.md) — **P0**, hardening, is next.
+> ⚠️ **Status (2026-10-02): the game is whole and hardened; the deploy comes next.** **S0–S4**,
+> **C0–C3** and **P0** have landed — the contracts, the round machine, the server, basic strategy
+> and a simulator ([`docs/sim/`](docs/sim/README.md)), and the table: Pixi + GSAP on one clock, a
+> decision gate, splits to four hands on a phone held upright, a Double's chips sent at the press
+> and sent back on a refusal, keys and screen-reader words for every decision, a history whose
+> every hand verifies in the browser. Hardened: a network lab that loses your replies after the
+> move applied, two tabs kept in step, and a 30-minute soak of 200 sessions with faults on and the
+> server SIGKILLed under it, audited to zero findings ([`docs/load/`](docs/load/README.md)).
+> `pnpm dev` to play it locally. See [`ROADMAP.md`](ROADMAP.md) — **P1**, the deploy, is next.
 
 ## What makes it interesting to build
 

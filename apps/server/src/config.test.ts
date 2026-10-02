@@ -20,6 +20,12 @@ describe('readConfig', () => {
     expect(readConfig({ BJ_ENV: 'production', BJ_DB: '/data/bj.db' }).dev).toBe(false);
   });
 
+  it('allows faults in production — a session can only break its own connection (§9)', () => {
+    const config = readConfig({ BJ_ENV: 'production', BJ_DB: '/data/bj.db', BJ_FAULTS: 'on' });
+    expect(config.faults).toBe(true);
+    expect(readConfig({}).faults).toBe(false);
+  });
+
   it('refuses a table whose stakes could make an inexact payout', () => {
     expect(() => readConfig({ BJ_MIN_BET: '150' })).toThrow(/multiple of betUnit/);
   });

@@ -34,7 +34,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ✅ (landed 2026-10-02) |
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ✅ (landed 2026-10-02) |
 | **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ✅ (landed 2026-10-02) |
-| **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ☐ |
+| **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ✅ (landed 2026-10-02) |
 | **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ☐ |
 
 **Legend:** ☐ not started · ◐ in progress · ✅ landed (add the date, as `✅ (landed 2026-10-04)`).
@@ -439,19 +439,55 @@ the step that catches it (commit; shuffle; replay; this browser's memory).
 
 _2 days._
 
-- [ ] Fault injection (`BJ_FAULTS=on`): latency, replies dropped after the action applied,
+- [x] Fault injection (`BJ_FAULTS=on`): latency, replies dropped after the action applied,
       `UNAVAILABLE` storms — and a network lab in the client to drive them on the live demo.
-- [ ] Two tabs on one session, both playing: every action lands once or is answered with
-      `CONFLICT`, and both tabs end showing the same round.
-- [ ] A server killed mid-hand (`SIGKILL`, not a clean stop) and restarted: every open round resumes,
-      no wallet differs from the sum of its rounds.
-- [ ] `tools/load`: 200 sessions playing basic strategy for 30 minutes against a running server with
-      faults on — money audited, latency percentiles per endpoint recorded.
-- [ ] A hidden tab mid-timeline, a reload mid-split, a slow link during the dealer's play — each
-      ends on the truth, without replay.
+      **Decided** ([`docs/protocol.md`](docs/protocol.md) §9, D11): faults live on the server, per
+      session, set over the wire (`POST /api/faults`) — a dropped reply must be dropped *after* the
+      move applied, the one failure a client cannot fake, and a live demo's lab must break only the
+      visitor's own table. So it is allowed in production. The session reply says `lab: true`; the
+      lab (⚡ in the HUD) sets latency, loses the next reply, refuses the next five requests, loses
+      30 % of replies, or takes this browser offline — a switch in front of the transport that lets
+      only the lab's own request through.
+- [x] Two tabs on one session, both playing: every action lands once or is answered with
+      `CONFLICT`, and both tabs end showing the same round. Each tab broadcasts the version of the
+      truth it holds (`TabSync`, a `BroadcastChannel`), and one that hears a version it does not
+      hold resyncs — from the server, never the other tab. **Found on the way:** a resync the
+      screen did not ask for (the other tab's news, a tab back in view) greyed the buttons while it
+      was out and nothing lit them again — the tab sat on the right truth with every button dead.
+      `client-core` now announces every start and end of a request (`onBusy`), and the table
+      redraws on it. In the browser (`hardening.mjs`): two tabs clicking at random for 40 s, every
+      accepted action recorded exactly once, both ending on the server's round. In the soak: 20
+      twin sessions for 30 minutes.
+- [x] A server killed mid-hand (`SIGKILL`, not a clean stop) and restarted: every open round resumes,
+      no wallet differs from the sum of its rounds. 5 kills in the soak, every wallet audited; in the
+      browser, a Stand pressed while the server is dead — status *retrying* — lands once when it is
+      back.
+- [x] `tools/load`: 200 sessions playing basic strategy for 30 minutes against a running server with
+      faults on — money audited, latency percentiles per endpoint recorded
+      ([`docs/load/`](docs/load/README.md)). `client-core` exactly as the browser uses it; the
+      audit over the wire alone, no look into the database.
+- [x] A hidden tab mid-timeline, a reload mid-split, a slow link during the dealer's play — each
+      ends on the truth, without replay. A reply landing in a hidden tab is now drawn as it stands
+      (the browser gives a hidden tab no frames, so a script would wait and play in one jump), and
+      a tab back in view resyncs; a reload after a split comes back with both hands and the right
+      buttons, nothing replayed; 3 s of latency set from the lab greys the bar for the whole wait
+      and the dealer's play then animates to the truth; a reply lost from the lab is one card, not
+      two. Each checked in Chromium by `hardening.mjs`, with the frame monitor on every page; the
+      hidden-tab check caught a mutant that played the reply anyway.
 
 **Done when:** a 200-session 30-minute soak with injected faults ends with zero money created or
 destroyed, zero cards dealt twice, and zero clients showing a round the server does not have.
+**Met 2026-10-02** (`pnpm load -- --sessions 200 --minutes 30`): 31.1 minutes, 5 SIGKILLs,
+413,314 requests (23,395 lost on the wire), 138,445 rounds and 192,475 decisions —
+**zero findings**: every wallet its rounds' sum, every accepted move held and none twice, every card
+once, every round a tab showed the server's. Round trips for clean sessions 1–2 ms at p50 and
+8–11 ms at p99 on one laptop, the worst about a second; the table is in
+[`docs/load/`](docs/load/README.md). **The first full run did not
+pass:** 26 findings, all a move the server held once that its tab had not been told was accepted —
+retries that ran out, and twin-tab retries whose stored reply had been superseded (§7). The audit
+had counted only `ok` answers; it now holds the server between what the tabs were told and what they
+sent, and a one-tab session may not see a conflict at all. Checked against an idempotency-off server
+mutant: 18 findings in a one-minute run.
 
 ## Block P1 — Packaging
 
