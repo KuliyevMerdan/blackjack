@@ -24,7 +24,8 @@ export const insuranceDecided = event('insuranceDecided', { stake: amount });
 export const dealerPeeked = event('dealerPeeked', { blackjack: z.boolean() });
 export const handSplit = event('handSplit', { hand: handIndex, newHand: handIndex, stake });
 export const handDoubled = event('handDoubled', { hand: handIndex, stake });
-export const handStood = event('handStood', { hand: handIndex });
+/** `auto: false` is the player's stand (`STOOD`); `true` a hand that stopped on its own (`DONE`). */
+export const handStood = event('handStood', { hand: handIndex, auto: z.boolean() });
 export const handBusted = event('handBusted', { hand: handIndex });
 export const activeHandChanged = event('activeHandChanged', { hand: handIndex.nullable() });
 export const holeRevealed = event('holeRevealed', { card });

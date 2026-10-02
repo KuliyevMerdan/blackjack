@@ -30,8 +30,11 @@ These hold for every request and reply. A change to any of them is an ADR, not a
    decision in front of the player. The client offers exactly those and computes none itself.
 6. **Every reply carries the new snapshot and the events that produced it**
    ([ADR-0002](adr/ADR-0002-presentation-lags-truth.md)). Applying the events, in order, to the
-   previous snapshot yields the new one exactly. The snapshot is the truth; the events are its
-   proof and the presentation's script.
+   previous snapshot yields the new one exactly — every card, stake, state, outcome and amount on
+   the table; not `seq`, `allowed` or the round's identity, which are the server's to say rather
+   than things that happened. The snapshot is the truth; the events are its proof and the
+   presentation's script. `protocol.fold(previous, events)` is that application, shared by the
+   engine's tests and a dev client's assertion on every reply.
 7. **Every game request names the version it was decided on** (`seq`) and carries a client-generated
    `actionId`. A replayed `actionId` returns the original reply; a stale `seq` is a conflict, never
    an action applied to a hand the player was not looking at (§7).
@@ -221,13 +224,28 @@ it happened. They are the presentation's script and the snapshot's proof (invari
 | `dealerPeeked` | `blackjack: boolean` | under an ace (after insurance) or a ten-value |
 | `handSplit` | `hand`, `newHand`, `stake` | the second card moves to `newHand`; its cards follow as `cardDealt` |
 | `handDoubled` | `hand`, `stake` | the extra stake; the one card follows as `cardDealt` |
-| `handStood` | `hand` | a stand, or an automatic one (`DONE`) |
+| `handStood` | `hand`, `auto` | `auto: false` — the player stood (`STOOD`); `true` — the hand stopped on its own (`DONE`) |
 | `handBusted` | `hand` | |
 | `activeHandChanged` | `hand: number \| null` | |
 | `holeRevealed` | `card` | the turn |
 | `handSettled` | `hand`, `outcome`, `payout` | per hand, left to right |
 | `insuranceSettled` | `payout` | |
 | `roundSettled` | `totalPayout`, `serverSeed` | last in every settling reply |
+
+The order within a reply is the order at the table:
+
+- **Deal:** `roundStarted`, `cardDealt` ×3 and `holeDealt` in §3.3's order; then `insuranceOffered`
+  and stop, or `dealerPeeked` under a ten-value; then `activeHandChanged`, or the settlement.
+- **Insurance:** `insuranceDecided`, `dealerPeeked`; on a dealer blackjack `holeRevealed` next.
+  Taken insurance settles here, at the peek, either way (`insuranceSettled`, 0 when it lost).
+- **Split:** `handSplit`, then the first hand's card. A split hand takes its second card when it
+  becomes active: `activeHandChanged`, then `cardDealt` to it.
+- **Double:** `handDoubled`, `cardDealt`, then `handStood` (`auto`) or `handBusted`.
+- **End of play:** `activeHandChanged` to `null`, `holeRevealed`, the dealer's `cardDealt`s, one
+  `handSettled` per hand from the left, `roundSettled`.
+
+A hand's `BLACKJACK` state has no event: it is read off its two cards (§4.1) when the second lands
+on a hand not born of a split — by the engine, and by `fold`, with the same `value()`.
 
 ## 3. The shoe
 
@@ -311,7 +329,8 @@ the first two cards of a hand **not** born of a split; a split hand's 21 is 21.
 
 1. Deal (§3.3). The stake is debited.
 2. If the dealer shows an ace: phase `INSURANCE`. The player takes insurance (half the base stake,
-   debited) or declines. With a player blackjack, insurance is what other tables call even money.
+   debited) or declines; it is offered only when the balance covers it. With a player blackjack,
+   insurance is what other tables call even money. Insurance settles at the peek that follows.
 3. If the dealer shows an ace or a ten-value: the **peek**. Dealer blackjack ends the round:
    the hole card turns, insurance pays, every hand settles against it.
 4. If the player has blackjack and the dealer does not: the round settles at once.

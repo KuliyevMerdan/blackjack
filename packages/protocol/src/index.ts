@@ -11,3 +11,4 @@ export * from './round.js';
 export * from './events.js';
 export * from './errors.js';
 export * from './api.js';
+export * from './fold.js';

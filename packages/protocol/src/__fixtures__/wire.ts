@@ -87,6 +87,19 @@ export const SETTLED_ROUND = {
   serverSeed: SERVER_SEED,
 };
 
+/** The nines split, the first stood on 19, the second drawn to 11 — the double comes next. */
+export const BEFORE_DOUBLE = {
+  ...OPEN_ROUND,
+  seq: 2,
+  hands: [
+    { cards: ['9H', 'TD'], stake: 500, doubled: false, fromSplit: true, state: 'STOOD' },
+    { cards: ['9C', '2S'], stake: 500, doubled: false, fromSplit: true, state: 'PLAYING' },
+  ],
+  activeHand: 1,
+  allowed: ['hit', 'stand', 'double'],
+  totalStake: 1000,
+};
+
 export const EVENTS = {
   roundStarted: { type: 'roundStarted', stake: 500 },
   cardDealt: { type: 'cardDealt', to: 0, card: '9H' },
@@ -97,7 +110,7 @@ export const EVENTS = {
   dealerPeeked: { type: 'dealerPeeked', blackjack: false },
   handSplit: { type: 'handSplit', hand: 0, newHand: 1, stake: 500 },
   handDoubled: { type: 'handDoubled', hand: 1, stake: 500 },
-  handStood: { type: 'handStood', hand: 0 },
+  handStood: { type: 'handStood', hand: 0, auto: false },
   handBusted: { type: 'handBusted', hand: 2 },
   activeHandChanged: { type: 'activeHandChanged', hand: 1 },
   activeHandCleared: { type: 'activeHandChanged', hand: null },
@@ -140,7 +153,9 @@ export const REPLIES = {
   settle: {
     round: SETTLED_ROUND,
     events: [
+      EVENTS.handDoubled,
       { type: 'cardDealt', to: 1, card: '8H' },
+      { type: 'handStood', hand: 1, auto: true },
       { type: 'activeHandChanged', hand: null },
       EVENTS.holeRevealed,
       { type: 'handSettled', hand: 0, outcome: 'WIN', payout: 1000 },

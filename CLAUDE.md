@@ -5,14 +5,17 @@ repository.
 
 ## Project status
 
-> ⚠️ **The contracts exist; the game does not.** **S0 landed 2026-10-02**: the pnpm + Turborepo
+> ⚠️ **The rules play headless; nothing serves them yet.** **S0 landed 2026-10-02**: the pnpm + Turborepo
 > workspace, strict TypeScript, the dependency graph and the purity rules enforced and *proven to
 > fire* against deliberately illegal fixtures, and CI running `pnpm check`. **S1 landed
 > 2026-10-02**: the four packages everything reads — `money` (exact or nothing), `cards` (the value
 > of a hand), `fair` (SHA-256, HMAC and an unbiased shuffle, pinned by an independent Python
 > implementation in Node and in a DOM), and `protocol` (every request, reply, event and error as a
-> zod schema, with the face-down invariant checked at the boundary). Nine units are still empty
-> shells, each already policed. **S2 — the round machine, `packages/engine` — is next.**
+> zod schema, with the face-down invariant checked at the boundary). **S2 landed 2026-10-02**: the
+> round machine — deal, insurance, peek, four-hand splits, the dealer, settlement — pure, with
+> `allowed` matched against an independent oracle and 100,000 random hands folding to their
+> snapshots with money conserved at every step. Eight units are still empty shells, each already
+> policed. **S3 (the server) and S4 (strategy + sim) are next, in either order.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -74,17 +77,17 @@ nowhere to come from.
 
 ### Packages
 
-All thirteen exist since **S0**; the four marked ✅ are written, the rest are empty shells — a
+All thirteen exist since **S0**; the five marked ✅ are written, the rest are empty shells — a
 `src/index.ts` naming its block, a build to `dist/`, and the dependency rules already applied. The
 right-hand column is the block that fills each.
 
 | Package | Responsibility | Block |
 | --- | --- | --- |
-| `packages/protocol` | zod schemas + inferred types for every request, reply and event in [`docs/protocol.md`](docs/protocol.md); the four-class error taxonomy with the class a function of the code; `ENDPOINTS`, `EVENT_TYPES`, `PUBLISHED_RULES`. The `round` schema refuses a snapshot that breaks a protocol invariant — a server seed or a second dealer card before settlement, an `allowed` outside its phase | ✅ S1 |
+| `packages/protocol` | zod schemas + inferred types for every request, reply and event in [`docs/protocol.md`](docs/protocol.md); the four-class error taxonomy with the class a function of the code; `ENDPOINTS`, `EVENT_TYPES`, `PUBLISHED_RULES`. The `round` schema refuses a snapshot that breaks a protocol invariant — a server seed or a second dealer card before settlement, an `allowed` outside its phase. `fold(previous, events)` — invariant 6 as a function, shared by the engine's tests and the client's dev assertion | ✅ S1 · `fold` S2 |
 | `packages/money` | branded `Minor`, integer arithmetic, `ratio` / `payout` / `half` that return an exact amount or throw `InexactAmountError` — never round, never floor — and `Intl.NumberFormat` display | ✅ S1 |
 | `packages/cards` | `Card` as the exact set of 52 two-character codes, `canonicalShoe(decks)`, `points`, `sameValue` (the split-by-value test), and `value(cards) → { total, soft, natural, bust }`. `natural` is an ace and a ten-value as two cards; whether that is a *blackjack* depends on whether the hand came from a split, which the engine knows. Pure, tiny, shipped to both sides | ✅ S1 |
 | `packages/fair` | SHA-256 and HMAC-SHA256 in plain TypeScript (a key's inner and outer states computed once, so each HMAC is two compressions), `commit`, `wordStream`, `below` (rejection), `shuffleInPlace`, `shoe(serverSeed, clientSeed)` — 85 µs a shoe. **Isomorphic**: the same suite passes in Node and happy-dom | ✅ S1 |
-| `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }`. Pure | S2 |
+| `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }` with refusals as values; `view(state)` the only door to the wire (the hole card and server seed stay behind it); `replay(…)` for the verifier and the server's resume. Pure | ✅ S2 |
 | `packages/strategy` | basic strategy for the published rules, as a table, with the action it recommends for any `(hand, upcard, allowed)`. Pure | S4 |
 | `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM** | C0 |
 | `packages/director` | `(previous snapshot, events, pace) → Beat[]` — the choreography as data. Pure, **no Pixi, no GSAP** | C1 |
@@ -206,7 +209,7 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 | Unit | `cards.value` against a brute-force oracle over every two-card hand and every three-card hand of ranks; `money` exact at every ratio the game uses, refusing every inexact one; SHA-256 and HMAC against the FIPS 180-4 and RFC 4231 vectors; `below` rejecting exactly the words it must; the schemas refusing every invariant break | ✅ S1 |
 | Golden | the first 20 cards for 30 seed pairs, and all 312 for one, from [`packages/fair/golden/shuffle.py`](packages/fair/golden/shuffle.py) — Python's `hashlib` and `hmac`, written from the protocol document. `tests/golden-fresh.test.ts` reruns it and requires the committed fixture byte for byte, so the vectors cannot drift by hand | ✅ S1 |
 | Uniformity | χ² over 240,000 shuffles of four items (all 24 orders) and over 20,000 full shoes (one tagged card's position) — the rejection step proven by test, not assumed | ✅ S1 |
-| Engine | every legal transition, every illegal one refused, `allowed` exact at every decision, events fold to the snapshot, money conserved over 100,000 seeded hands with random legal play | S2 |
+| Engine | every transition and refusal on stacked shoes · `allowed` against an oracle written from §4.2 at every decision of 10,000 hands under random rule sets, and `act` accepting exactly it · 100,000 seeded hands of random legal play: every snapshot and event parsed, events folding to the snapshot, money conserved at every step · 10,000 hands replayed from their decisions alone | ✅ S2 |
 | Statistical | `tools/sim`: basic strategy over ≥10⁷ hands, realised edge within 3σ of the published figure for these rules | S4 |
 | Choreography | `director`: every event sequence ends in its snapshot's picture; skip from any beat lands there too | C1 |
 | Integration | a real server, two tabs on one hand, lost replies, restart mid-hand | S3, P0 |

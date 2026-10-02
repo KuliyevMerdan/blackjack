@@ -27,7 +27,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | --- | --- | --- | --- |
 | **S0** | Workspace, strict TS, boundary lint, purity tests, CI | — | ✅ (landed 2026-10-02) |
 | **S1** | `protocol` · `money` · `cards` · `fair` — the contracts everything reads | S0 | ✅ (landed 2026-10-02) |
-| **S2** | `engine` — the round machine, pure and headless | S1 | ☐ |
+| **S2** | `engine` — the round machine, pure and headless | S1 | ✅ (landed 2026-10-02) |
 | **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ☐ |
 | **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ☐ |
 | **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ☐ |
@@ -112,27 +112,42 @@ schemas parse a hand-written fixture of every request, reply, event and error.
 
 _3 days. The part reviewers actually read._
 
-- [ ] `packages/engine`: `step(state, command, shoe) → { state, events }`. Phases as an exhaustive
+- [x] `packages/engine`: `step(state, command, shoe) → { state, events }`. Phases as an exhaustive
       discriminated union with a total `switch`. **The engine returns events; it never emits.**
-- [ ] The deal in the pinned order (§3.3), insurance under an ace, the peek under an ace or a
+      Refusals (`ROUND_OPEN`, `NO_OPEN_ROUND`, `INSUFFICIENT_FUNDS`, `ACTION_NOT_ALLOWED`) are
+      values, not throws; a throw is a bug — an inexact stake at the deal, a shoe that ran out.
+      `view(state)` is the one door to the wire: the hole card and the server seed stay behind it.
+- [x] The deal in the pinned order (§3.3), insurance under an ace, the peek under an ace or a
       ten-value, blackjack settling in the deal (§4.3).
-- [ ] Decisions: hit, stand, double, split by value to four hands, split aces one card each, no
+- [x] Decisions: hit, stand, double, split by value to four hands, split aces one card each, no
       resplit aces, auto-stand on 21. `allowed` computed for every decision and **exact** — every
       action in it accepted, every action outside it refused.
-- [ ] The dealer: turns the hole card, draws to 17, stands on soft 17, does not draw when every hand
+- [x] The dealer: turns the hole card, draws to 17, stands on soft 17, does not draw when every hand
       is bust.
-- [ ] Settlement through `money.payout`, left to right, insurance separately; `totalStake` and
-      `totalPayout` on the snapshot.
-- [ ] `fold(previous, events) == state` asserted for every step — the events are a proof of the
+- [x] Settlement through `money.payout`, left to right, insurance separately; `totalStake` and
+      `totalPayout` on the snapshot. **Diverged:** insurance settles at the peek, not with the
+      hands — that is when a table takes or pays it, and the presentation can show it there.
+- [x] `fold(previous, events) == state` asserted for every step — the events are a proof of the
       snapshot (protocol invariant 6), and the property is the engine's, so the client can rely on
-      it.
-- [ ] `replay(rules, shoe, stake, decisions)` — the verifier's entry point, and the same function the
-      server's resume uses.
-- [ ] Tests: every transition and refusal · `allowed` against a brute-force oracle at every decision
+      it. **Diverged:** `fold` lives in `protocol`, not `engine` — `client-core` may not import the
+      engine and must run the same fold on every reply. It proves the *table* (`tableOf`): not
+      `seq`, `allowed` or the round's identity, which no event carries. `handStood` gained `auto`,
+      without which `STOOD` and `DONE` could not be told apart from the events alone.
+- [x] `replay(rules, shoe, stake, decisions)` — the verifier's entry point, and the same function the
+      server's resume uses. **Diverged:** it also takes the round's `seeds` (the snapshot carries
+      `roundId`, `commit`, `clientSeed`) and holds each decision to the `seq` it names. The balance
+      is optional: only affordability depends on it, and a recorded decision was affordable, so the
+      verifier replays with `maxExposure` — every hand split and doubled, plus insurance.
+- [x] Tests: every transition and refusal · `allowed` against a brute-force oracle at every decision
       of 10,000 random hands · the four-hand split with a double on each · dealer blackjack under an
       ace with insurance taken and declined · a player blackjack against a dealer ace · 100,000
       seeded hands of random legal play with money conserved after every step and every event
-      parsed against the wire schema.
+      parsed against the wire schema. The oracle is a second reading of §4.2 over the wire snapshot,
+      run under random rule sets (max hands, DAS, H17, hit/resplit aces, auto-stand, insurance) and
+      random balances, with `act` tried on all six actions at every decision. 100,000 hands take
+      ≈3 s; the run asserts it reached every action, every outcome and four hands. Three mutations
+      — a double not debited, a split that ignores the balance, an auto-stand reported as a stand —
+      each turn a suite red.
 
 **Done when:** 100,000 seeded hands of random legal play end with every unit of money accounted for,
 every snapshot equal to the fold of its events, and every `allowed` equal to the oracle's.
