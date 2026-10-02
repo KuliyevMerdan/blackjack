@@ -17,15 +17,17 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --config ../../config/vitest.package.ts"
+    "test": "vitest run --config ../../config/vitest.package.ts",
+    "sim": "node dist/main.js"
   },
   "dependencies": {
-    "@blackjack/engine": "workspace:*",
-    "@blackjack/strategy": "workspace:*",
-    "@blackjack/fair": "workspace:*",
     "@blackjack/cards": "workspace:*",
+    "@blackjack/engine": "workspace:*",
+    "@blackjack/fair": "workspace:*",
     "@blackjack/money": "workspace:*",
-    "@blackjack/protocol": "workspace:*"
+    "@blackjack/protocol": "workspace:*",
+    "@blackjack/strategy": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^20",

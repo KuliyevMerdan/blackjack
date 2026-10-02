@@ -5,7 +5,7 @@ repository.
 
 ## Project status
 
-> ⚠️ **The table serves; nothing draws it yet.** **S0 landed 2026-10-02**: the pnpm + Turborepo
+> ⚠️ **The table serves and is measured; nothing draws it yet.** **S0 landed 2026-10-02**: the pnpm + Turborepo
 > workspace, strict TypeScript, the dependency graph and the purity rules enforced and *proven to
 > fire* against deliberately illegal fixtures, and CI running `pnpm check`. **S1 landed
 > 2026-10-02**: the four packages everything reads — `money` (exact or nothing), `cards` (the value
@@ -16,8 +16,10 @@ repository.
 > `allowed` matched against an independent oracle and 100,000 random hands folding to their
 > snapshots with money conserved at every step. **S3 landed 2026-10-02**: the server — sessions,
 > wallets, seeds, idempotency and versions, SQLite, `/fair` — proven over 1,000 hands with two tabs,
-> lost replies and restarts. Seven units are still empty shells, each already policed. **S4
-> (strategy + sim) and C0 (client-core) are next.**
+> lost replies and restarts. **S4 landed 2026-10-02**: basic strategy as a table, every pair cell
+> measured against the engine, and 3·10⁷ simulated rounds against the published edge
+> ([`docs/sim/`](docs/sim/README.md)). Five units are still empty shells, each already policed.
+> **C0 — `client-core` — is next.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -79,7 +81,7 @@ nowhere to come from.
 
 ### Packages
 
-All thirteen exist since **S0**; the six marked ✅ are written, the rest are empty shells — a
+All thirteen exist since **S0**; the eight marked ✅ are written, the rest are empty shells — a
 `src/index.ts` naming its block, a build to `dist/`, and the dependency rules already applied. The
 right-hand column is the block that fills each.
 
@@ -90,13 +92,13 @@ right-hand column is the block that fills each.
 | `packages/cards` | `Card` as the exact set of 52 two-character codes, `canonicalShoe(decks)`, `points`, `sameValue` (the split-by-value test), and `value(cards) → { total, soft, natural, bust }`. `natural` is an ace and a ten-value as two cards; whether that is a *blackjack* depends on whether the hand came from a split, which the engine knows. Pure, tiny, shipped to both sides | ✅ S1 |
 | `packages/fair` | SHA-256 and HMAC-SHA256 in plain TypeScript (a key's inner and outer states computed once, so each HMAC is two compressions), `commit`, `wordStream`, `below` (rejection), `shuffleInPlace`, `shoe(serverSeed, clientSeed)` — 85 µs a shoe. **Isomorphic**: the same suite passes in Node and happy-dom | ✅ S1 |
 | `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }` with refusals as values; `view(state)` the only door to the wire (the hole card and server seed stay behind it); `replay(…)` for the verifier and the server's resume. Pure | ✅ S2 |
-| `packages/strategy` | basic strategy for the published rules, as a table, with the action it recommends for any `(hand, upcard, allowed)`. Pure | S4 |
+| `packages/strategy` | basic strategy for the published rules, as a table (`ROWS`: hard, soft, pairs × ten up cards), and `recommend(hand, upcard, allowed)` — always one of `allowed`, falling back as a player would (double → hit, or stand on a soft 18; a split refused at four hands → the pair's total). Insurance never. Pure | ✅ S4 |
 | `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM** | C0 |
 | `packages/director` | `(previous snapshot, events, pace) → Beat[]` — the choreography as data. Pure, **no Pixi, no GSAP** | C1 |
 | `packages/renderer` | the table: Pixi v8 scene, generated card atlas, GSAP timelines on the Pixi ticker, plays `Beat[]`. **No protocol** | C1 |
 | `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production | ✅ S3 |
 | `apps/web` | Vite — the Pixi canvas, a DOM action bar and bet panel over it, the verification page | C1–C3 |
-| `tools/sim` | N-million-hand run of basic strategy: realised house edge and its confidence interval | S4 |
+| `tools/sim` | basic strategy through the engine on worker threads, each round a fresh protocol shuffle: realised edge ± σ against the published figure, outcomes, how often each rule fires (`pnpm sim`); every pair cell's actions on common shoes (`pnpm sim -- --chart`). Exits 1 when a result does not hold | ✅ S4 |
 | `tools/load` | many sessions playing basic strategy against a running server, money audited | P0 |
 
 **PixiJS + GSAP, DOM controls.** The table — felt, shoe, cards in flight, chips — is a scene, and
@@ -216,7 +218,7 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 | Golden | the first 20 cards for 30 seed pairs, and all 312 for one, from [`packages/fair/golden/shuffle.py`](packages/fair/golden/shuffle.py) — Python's `hashlib` and `hmac`, written from the protocol document. `tests/golden-fresh.test.ts` reruns it and requires the committed fixture byte for byte, so the vectors cannot drift by hand | ✅ S1 |
 | Uniformity | χ² over 240,000 shuffles of four items (all 24 orders) and over 20,000 full shoes (one tagged card's position) — the rejection step proven by test, not assumed | ✅ S1 |
 | Engine | every transition and refusal on stacked shoes · `allowed` against an oracle written from §4.2 at every decision of 10,000 hands under random rule sets, and `act` accepting exactly it · 100,000 seeded hands of random legal play: every snapshot and event parsed, events folding to the snapshot, money conserved at every step · 10,000 hands replayed from their decisions alone | ✅ S2 |
-| Statistical | `tools/sim`: basic strategy over ≥10⁷ hands, realised edge within 3σ of the published figure for these rules | S4 |
+| Statistical | `tools/sim`: three runs of 10⁷ rounds, each within 3σ of the published 0.40622 % (pooled 0.448 % ± 0.021 %) · 110 pair cells, the chart's action best within 3σ in each · a 2,000-round run pinned to the unit for a fixed seed | ✅ S4 |
 | Choreography | `director`: every event sequence ends in its snapshot's picture; skip from any beat lands there too | C1 |
 | Integration | 1,000 hands over real HTTP on SQLite: two tabs on one session, 15 % of replies lost and retried (byte-identical), two restarts mid-hand — the wallet equal to the sum of its rounds, every round verified from its seeds, every card dealt once · 10,000 hands scanned: no reply or log line carries a hole card or an unrevealed seed | ✅ S3 · P0 adds faults on the wire |
 | E2E | Playwright: a forced split into four hands with a double and a dealer bust, played through the real UI, then verified in the browser | P1 |
@@ -248,8 +250,10 @@ orders. `build` therefore runs before `typecheck` and the tests.
 The server on its own: `pnpm --filter @blackjack/server dev` (tsx watch; `BJ_DEV=on` for
 `forceShoe`, `BJ_DB=<file>` to keep wallets across restarts).
 
-Still to come: `pnpm dev` (server + web, watch mode) with **C1**, and
-`pnpm sim -- --hands 10000000` (the realised edge) with **S4**.
+`pnpm sim -- --hands 10000000` measures the realised edge (≈3 min on 12 threads; `--seed`,
+`--threads`); `pnpm sim -- --chart` measures every pair cell (≈45 s). Results: [`docs/sim/`](docs/sim/README.md).
+
+Still to come: `pnpm dev` (server + web, watch mode) with **C1**.
 
 A pre-commit hook (husky → lint-staged) runs ESLint and Prettier over staged files. `turbo.json`
 sets `agentGuidance: false`: Turborepo ≥ 2.11 otherwise writes an `AGENTS.md` whenever it detects an
@@ -260,13 +264,11 @@ AI agent, and this file is where the repository's guidance lives.
 Log what you hit here as you hit it ([Rule 1](#rule-1--log-the-gaps-you-hit)). Open at time of
 writing:
 
-- **The published house edge for these rules.** Six decks, S17, DAS, split to four hands, no
-  resplit aces, no surrender, peek, split by value. Published calculators put rule sets like this
-  near 0.4%; the exact figure for *this* set is pinned in **S4** from a published source and
-  confirmed by the sim — do not quote a number before then.
-- **Basic strategy for split-by-value and four hands.** Standard charts assume the usual rules. **S4**
-  confirms the table against the engine (per-cell EV by simulation where the chart is in doubt)
-  before the sim's edge is believed.
+- **The pooled edge sits 2σ high.** Three runs of 10⁷: 0.4987 %, 0.4238 %, 0.4215 % against a
+  published 0.40622 % — each within 3σ, pooled 0.448 % ± 0.021 % (+1.98σ), almost all of it the
+  first run. Probably chance (a 2σ excess happens about one time in twenty); the way to know is a
+  10⁸ run, or per-situation EVs held against Wizard of Odds' appendix tables. Not yet done.
+  ([`docs/sim/`](docs/sim/README.md))
 - **Pace.** How long a card travels, the pause before the dealer's draws, the gap between hands
   settling — **C1** sets the numbers by feel and by a measured round length, and writes them down.
 - **Four split hands in portrait.** Four hands of up to six cards each, a dealer row and a shoe, on a

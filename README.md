@@ -4,11 +4,12 @@ A **single-player blackjack table** — stake, deal, insurance under an ace, the
 and split to four hands until the dealer plays. Node + TypeScript on the server, PixiJS + GSAP in the
 browser, one HTTP request per decision.
 
-> ⚠️ **Status (2026-10-02): the table serves; nothing draws it yet.** **S0–S3** have landed — the
-> workspace and its enforced boundaries, the contracts (`protocol`, `money`, `cards`, `fair`), the
-> round machine in `packages/engine`, and the server in `apps/server`, proven over 1,000 hands with
-> two tabs, lost replies and restarts. See [`ROADMAP.md`](ROADMAP.md) — **S4**, strategy and the
-> simulator, and **C0**, the client core, are next.
+> ⚠️ **Status (2026-10-02): the table serves and is measured; nothing draws it yet.** **S0–S4**
+> have landed — the workspace and its boundaries, the contracts, the round machine, the server
+> (proven over 1,000 hands with two tabs, lost replies and restarts), and basic strategy with a
+> simulator: 3·10⁷ rounds through the engine against the published 0.406 % house edge
+> ([`docs/sim/`](docs/sim/README.md)). See [`ROADMAP.md`](ROADMAP.md) — **C0**, the client core,
+> is next.
 
 ## What makes it interesting to build
 

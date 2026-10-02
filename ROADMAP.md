@@ -29,7 +29,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **S1** | `protocol` · `money` · `cards` · `fair` — the contracts everything reads | S0 | ✅ (landed 2026-10-02) |
 | **S2** | `engine` — the round machine, pure and headless | S1 | ✅ (landed 2026-10-02) |
 | **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ✅ (landed 2026-10-02) |
-| **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ☐ |
+| **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ✅ (landed 2026-10-02) |
 | **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ☐ |
 | **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ☐ |
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ☐ |
@@ -202,20 +202,29 @@ from its seeds. Three mutations — the seed in a log line, the hole card in a r
 
 _1–2 days. Can run in parallel with S3._
 
-- [ ] `packages/strategy`: the basic-strategy table for the published rules — hard, soft and pair
+- [x] `packages/strategy`: the basic-strategy table for the published rules — hard, soft and pair
       hands against every upcard, insurance never — and `recommend(hand, upcard, allowed)`, which
       falls back correctly when its first choice is not allowed (double → hit or stand).
-- [ ] The table checked against the engine: for every cell where the published chart's rules differ
+- [x] The table checked against the engine: for every cell where the published chart's rules differ
       from ours (split by value, four hands), per-action EV by simulation, and the chart's action
-      shown to be the best within error.
-- [ ] `tools/sim`: ≥10⁷ hands of basic strategy through `engine` with real shuffles; realised edge,
+      shown to be the best within error. **All 110 pair cells**, not only the ones that differ —
+      every pair, plus a king with a ten — each open action on the same 20,000 shoes (common random
+      numbers), the chart's action best within 3σ of the paired difference in every one. A king
+      and a ten: standing beats splitting by 0.18–0.56 units against every up card.
+      ([`docs/sim/chart.txt`](docs/sim/chart.txt))
+- [x] `tools/sim`: ≥10⁷ hands of basic strategy through `engine` with real shuffles; realised edge,
       its standard error, the distribution of outcomes per hand, and how often each rule fires
-      (splits, doubles, insurance offers, dealer blackjacks).
-- [ ] The published edge for these rules pinned from a named source, and the sim within 3σ of it
-      ([`CLAUDE.md`](CLAUDE.md) § Gaps).
+      (splits, doubles, insurance offers, dealer blackjacks). Worker threads, ≈53,000 rounds/s on
+      12; tallies are sums, so a run split across threads gives the same answer (tested).
+- [x] The published edge for these rules pinned from a named source, and the sim within 3σ of it
+      ([`CLAUDE.md`](CLAUDE.md) § Gaps). **0.40622 %**, Wizard of Odds' house edge calculator,
+      "basic strategy with continuous shuffler" (a fresh shoe every round, as here). Three runs of
+      10⁷: +2.53σ, +0.48σ, +0.42σ; pooled 0.448 % ± 0.021 %, +1.98σ — logged as an open gap, not
+      rounded away. ([`docs/sim/`](docs/sim/README.md))
 
 **Done when:** `pnpm sim -- --hands 10000000` reports a realised edge within 3σ of the published
-figure, and a test pins a smaller run's result for a fixed seed.
+figure, and a test pins a smaller run's result for a fixed seed. ✅ 2,000 rounds of the seed
+`"pinned"` are held to the unit, outcome by outcome.
 
 ---
 

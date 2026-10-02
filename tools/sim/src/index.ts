@@ -1,6 +1,12 @@
 /**
- * @blackjack/sim — N-million-hand run of basic strategy: the realised house edge.
+ * @blackjack/sim — basic strategy played through the engine, many millions of times, against the
+ * published house edge for these rules; and every pair cell of the chart measured on common shoes.
  *
- * Empty until **S4** (ROADMAP.md). The dependency rules already police it.
+ * `main.ts` is the CLI (`pnpm sim`); the rest is importable so a test can pin a small run.
  */
-export {};
+export { simulate } from './run.js';
+export { playRound, playOut, dealFrom, shoeFor, netOf, RULES, UNIT } from './play.js';
+export { emptyTally, add, merge, edge, type Tally } from './tally.js';
+export { measureCell, judge, stack, PAIRS, UPCARDS, type Cell, type Verdict } from './cells.js';
+export { PUBLISHED } from './published.js';
+export { verdict, edgeReport, chartReport } from './report.js';

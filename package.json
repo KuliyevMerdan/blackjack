@@ -17,7 +17,8 @@
     "check": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test && pnpm run test:root && pnpm run format:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "sim": "turbo run build --filter=@blackjack/sim... --output-logs=errors-only && node tools/sim/dist/main.js"
   },
   "devDependencies": {
     "@blackjack/protocol": "workspace:*",

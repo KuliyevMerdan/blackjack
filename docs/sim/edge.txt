@@ -1,0 +1,36 @@
+Rounds          10,000,000 at one unit, basic strategy, a fresh protocol shuffle each
+Realised edge   0.4987 %  ± 0.0365 % (1σ)
+Published       0.4062 %  Wizard of Odds, Blackjack House Edge Calculator — "basic strategy with continuous shuffler"
+                6 decks · dealer stands on soft 17 · double any two · double after split · resplit to 4 hands · no resplit or hitting of split aces · original bet only against dealer blackjack · no surrender · blackjack pays 3 to 2
+Difference      +2.53σ — within 3σ ✓
+
+Net per round (units)
+  -8      0.00 %
+  -7      0.00 %
+  -6      0.00 %
+  -5      0.01 %
+  -4      0.05 %
+  -3      0.20 %
+  -2      4.20 %
+  -1     43.45 %
+  0       8.77 %
+  +1     32.61 %
+  +1.5    4.52 %
+  +2      5.85 %
+  +3      0.24 %
+  +4      0.07 %
+  +5      0.02 %
+  +6      0.00 %
+  +7      0.00 %
+  +8      0.00 %
+
+How often the rules fire
+  a split                2.48 % of rounds
+  four hands             0.04 % of rounds
+  a double              10.10 % of hands
+  insurance offered      7.69 % of rounds (never taken)
+  dealer blackjack       4.75 % of rounds
+  player blackjack       4.74 % of rounds
+  a bust                15.67 % of hands
+
+189.9 s · 52,665 rounds/s
