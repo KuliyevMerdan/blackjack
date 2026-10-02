@@ -24,6 +24,7 @@ export {
 export {
   Stage,
   driveGsapFromTicker,
+  framesOnDemand,
   type Described,
   type Playback,
   type Proposal,

@@ -42,11 +42,25 @@ page.on('pageerror', (e) => errors.push(e.message));
 // ── 1. boot ──
 const opened = Date.now();
 await page.goto(PAGE);
-await page.waitForFunction(() => document.querySelector('[data-deal]')?.disabled === false, null, {
-  timeout: 30_000,
-});
+await page.waitForFunction(
+  () => document.querySelector('[data-deal]')?.disabled === false && window.__bj !== undefined,
+  null,
+  { timeout: 30_000 },
+);
 const bootMs = Date.now() - opened;
 const atlasMs = await page.evaluate(() => window.__bj.atlasMs);
+
+// ── 1b. an idle table draws nothing (framesOnDemand) ──
+const idleDraws = await page.evaluate(async () => {
+  const { app } = window.__bj;
+  await new Promise((r) => setTimeout(r, 1000)); // the boot's frames settle
+  let drawn = 0;
+  const count = () => (drawn += 1);
+  app.ticker.add(count);
+  await new Promise((r) => setTimeout(r, 2000));
+  app.ticker.remove(count);
+  return drawn;
+});
 
 // ── 2. frames at normal pace ──
 // Two clocks per frame. The interval between frames is the browser's to set — headless Chromium
@@ -226,6 +240,7 @@ stop();
 const report = {
   gl,
   boot: { toDealMs: bootMs, atlasMs: Math.round(atlasMs) },
+  idleDrawsIn2s: idleDraws,
   idle,
   work: {
     frames: work.length,
@@ -253,6 +268,7 @@ const report = {
 report.frames.overTwiceIdle = frames.filter((f) => f > 2 * idle.p50).length;
 console.log(JSON.stringify(report, null, 2));
 const ok =
+  idleDraws === 0 &&
   report.work.over16_7ms === 0 &&
   report.frames.overTwiceIdle === 0 &&
   heapAt500 - heapAt50 < 2 &&

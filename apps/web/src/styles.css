@@ -23,8 +23,20 @@ body {
   color: var(--ink);
   overscroll-behavior: none;
 }
+/*
+ * The table is a box in the document's flow, the height of the screen with every browser bar
+ * shown (`svh`), and the canvas and the HUD sit inside it — not `position: fixed` to the viewport.
+ * Chrome on an iPhone draws the page under its address bar and moves only the flow down, never a
+ * fixed element: a page that cannot scroll never collapses the bar, so a fixed HUD stayed under it.
+ */
+body {
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+}
 #stage {
-  position: fixed;
+  position: absolute;
   inset: 0;
   touch-action: manipulation;
 }
@@ -32,7 +44,7 @@ body {
   display: block;
 }
 #ui {
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
@@ -335,6 +347,8 @@ kbd {
 
 /* ── the verification page ───────────────────────────────────────────────────────────────── */
 body.page {
+  height: auto;
+  min-height: 100%;
   overflow: auto;
 }
 body.page #ui {

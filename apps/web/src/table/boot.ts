@@ -1,6 +1,12 @@
 import type { Client, KeyValue } from '@blackjack/client-core';
 import { pictureOf } from '@blackjack/director';
-import { Stage, buildAtlas, driveGsapFromTicker, type Insets } from '@blackjack/renderer';
+import {
+  Stage,
+  buildAtlas,
+  driveGsapFromTicker,
+  framesOnDemand,
+  type Insets,
+} from '@blackjack/renderer';
 import { Application } from 'pixi.js';
 import { feltWords } from '../rules.js';
 import { TableController } from './controller.js';
@@ -52,13 +58,21 @@ export async function bootTable(
    * them (styles.css puts them in a column at the right). Measured, not assumed.
    */
   const insets = (): Insets => {
+    // In the stage's own coordinates: the page may not start at the viewport's top (a browser bar
+    // above it), and the canvas is laid out from its own corner.
+    const host = stageHost.getBoundingClientRect();
     const header = uiHost.querySelector('.hud')?.getBoundingClientRect();
     const controls = uiHost.querySelector('.controls')?.getBoundingClientRect();
-    const top = Math.ceil((header?.bottom ?? 52) + 6);
-    if (controls !== undefined && controls.left > stageHost.clientWidth / 2) {
-      return { top, bottom: stageHost.clientHeight - 12, right: Math.floor(controls.left - 6) };
+    const top = Math.ceil((header === undefined ? 52 : header.bottom - host.top) + 6);
+    if (controls !== undefined && controls.left - host.left > stageHost.clientWidth / 2) {
+      return {
+        top,
+        bottom: stageHost.clientHeight - 12,
+        right: Math.floor(controls.left - host.left - 6),
+      };
     }
-    return { top, bottom: Math.floor((controls?.top ?? stageHost.clientHeight - 140) - 6) };
+    const bottom = controls === undefined ? stageHost.clientHeight - 140 : controls.top - host.top;
+    return { top, bottom: Math.floor(bottom - 6) };
   };
 
   const app = new Application();
@@ -71,6 +85,11 @@ export async function bootTable(
   });
   stageHost.append(app.canvas);
   driveGsapFromTicker(app.ticker);
+  // An idle table draws nothing: the ticker stops once the stage has been still for a few frames,
+  // and the stage wakes it before it changes anything. A resize clears the canvas, so it wakes too.
+  let still: () => boolean = () => false;
+  const wake = framesOnDemand(app.ticker, () => still());
+  window.addEventListener('resize', wake);
 
   const atlasStarted = performance.now();
   const textures = buildAtlas(app.renderer, 96, Math.min(3, window.devicePixelRatio || 1));
@@ -83,7 +102,9 @@ export async function bootTable(
     format: money,
     chip: chipLabel,
     insets: insets(),
+    wake,
   });
+  still = () => stage.idle;
   app.stage.addChild(stage.root);
   const resize = () => stage.resize(stageHost.clientWidth, stageHost.clientHeight, insets());
   new ResizeObserver(resize).observe(stageHost);

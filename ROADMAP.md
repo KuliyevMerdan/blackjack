@@ -536,6 +536,20 @@ Found on the way, and fixed in this block:
 - **The lab** went on claiming "the next reply lost" after the server had spent it; it re-reads a
   pending countdown after each move.
 
+After landing (2026-10-03), from a real phone and the probes rerun:
+
+- **Chrome on an iPhone hid the top of the page** under its address bar. The table is now a box in
+  the document's flow, `100svh` high, the canvas and the HUD inside it, and the felt's band is
+  measured from the stage's own corner — not `position: fixed` to a viewport Chrome draws under.
+  Unverified until seen on the device (CLAUDE.md § Gaps).
+- **An idle table drew 60–120 frames a second.** `framesOnDemand` stops Pixi's ticker after ten
+  still frames and the stage wakes it before any change — bringing GSAP's clock to the present
+  first, or a script after a quiet minute would open a minute in (tested). `perf.mjs` now counts
+  the frames of two idle seconds: **0**.
+- **A chip stack leaked its GPU geometry every round** — `perf.mjs`'s 500-round heap check had
+  been failing since C2 (8.6 → 16.7 MB): Pixi destroys a Graphics' context only when asked. Now
+  7.7 → 8.1 MB. The probe also waited for its `__bj` handle too early under a throttled CPU.
+
 **Done when:** a stranger can open the live link, play a hand with a split, break the network from
 the lab mid-hand, watch it recover with nothing lost, and verify the hand they just played — in
 under two minutes.

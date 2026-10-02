@@ -43,6 +43,11 @@ export interface StageOptions {
   readonly chip?: (minor: number) => string;
   /** The band between the app's HUD and its controls; a phone's usual sizes if absent. */
   readonly insets?: Insets;
+  /**
+   * Called before anything on the stage changes — a picture drawn, a script started or skipped, a
+   * tween begun — so an app that stops drawing an idle table (`framesOnDemand`) draws again.
+   */
+  readonly wake?: () => void;
 }
 
 /** A script being played. `skip()` completes it: the screen snaps to where it was heading. */
@@ -177,7 +182,7 @@ export class Stage {
   /** Draws `picture` as it stands — a resume, a resync, a conflict, a skip's destination. */
   render(picture: StagePicture): void {
     this.finish();
-    for (const p of this.pending) p.stack.root.destroy({ children: true });
+    for (const p of this.pending) p.stack.root.destroy(GONE);
     this.pending = [];
     this.picture = picture;
     this.place = this.lay(shapeOf(picture));
@@ -266,6 +271,7 @@ export class Stage {
 
   /** Completes the timeline and every tween in flight, in order — the skip. */
   finish(): void {
+    this.options.wake?.();
     const timeline = this.timeline;
     this.timeline = null;
     if (timeline !== null) {
@@ -282,6 +288,7 @@ export class Stage {
 
   /** What the felt says — the rules, worded by the app from the config (the stage cannot read it). */
   setFelt(text: string): void {
+    this.options.wake?.();
     this.print.text = text;
     this.placePrint();
   }
@@ -342,7 +349,7 @@ export class Stage {
           y: bank.y,
           duration: move.ms / 1000,
           ease: 'power2.in',
-          onComplete: () => stack.root.destroy({ children: true }),
+          onComplete: () => stack.root.destroy(GONE),
         });
       },
     };
@@ -361,12 +368,12 @@ export class Stage {
     }
     if (beat.kind === 'clear') {
       // A new round: last round's stakes leave with its cards, and the new stake comes from the bank.
-      for (const stack of this.stacks) stack.root.destroy({ children: true });
+      for (const stack of this.stacks) stack.root.destroy(GONE);
       this.stacks = [];
     }
     if (beat.kind === 'double') {
       const taken = this.takePending('double');
-      taken?.root.destroy({ children: true });
+      taken?.root.destroy(GONE);
     }
     this.picture = after;
     this.place = this.lay(shapeOf(after));
@@ -479,6 +486,7 @@ export class Stage {
   }
 
   private tween(target: object, vars: gsap.TweenVars): void {
+    this.options.wake?.();
     const onComplete = vars.onComplete;
     // A zero-length tween completes inside `gsap.to`, before it returns: track it only if it lives.
     let finished = false;
@@ -523,7 +531,7 @@ export class Stage {
 
   /** As many stacks as hands: new ones come from `from` (the bank), surplus ones go at once. */
   private fitStacks(count: number, from: Point | null): void {
-    while (this.stacks.length > count) this.stacks.pop()?.root.destroy({ children: true });
+    while (this.stacks.length > count) this.stacks.pop()?.root.destroy(GONE);
     while (this.stacks.length < count) this.stacks.push(this.createStack(from ?? { x: 0, y: 0 }));
   }
 
@@ -692,15 +700,28 @@ export class Stage {
     };
   }
 
+  /** Nothing playing and nothing in flight: the next frame would draw what the last one did. */
+  get idle(): boolean {
+    return this.timeline === null && this.tweens.size === 0;
+  }
+
   get position(): { cue: number; done: boolean } {
     return { ...this.playing };
   }
 
   destroy(): void {
     this.finish();
-    this.root.destroy({ children: true });
+    this.root.destroy(GONE);
   }
 }
+
+/**
+ * How the stage lets go of a container: its children too, and each Graphics' own drawing context
+ * with them. Pixi destroys a Graphics' context only when `destroy()` gets no options or
+ * `context: true` — with `{ children: true }` alone every chip stack left its GPU geometry behind,
+ * two buffers and a vertex array a round (found by `perf.mjs`'s 500-round heap check, after C2).
+ */
+const GONE = { children: true, context: true } as const;
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 /** A chip is drawn this big and scaled to the layout's radius. */
@@ -784,6 +805,39 @@ function label(): Text {
     text: '',
     style: { fontFamily: FONT, fontSize: 13, fontWeight: '600', fill: 0xf4f1e8, lineHeight: 16 },
   });
+}
+
+/**
+ * Frames only when something moves. Pixi's ticker draws every frame, idle or not — a phone keeps
+ * redrawing a table nobody touches. This stops the ticker after `settle` frames of `idle()`, and
+ * the returned `wake` starts it again — handed to the stage as `StageOptions.wake`, so it runs
+ * before anything changes. The ticker restarts at the present (`start()` sets its `lastTime` to
+ * now), and GSAP's clock is brought there **before** anything new is timed on it: otherwise a
+ * script started after a quiet minute would open a minute in, already over.
+ */
+export function framesOnDemand(
+  ticker: {
+    readonly started: boolean;
+    readonly lastTime: number;
+    start(): void;
+    stop(): void;
+    add(fn: () => void): unknown;
+  },
+  idle: () => boolean,
+  settle = 10,
+): () => void {
+  let still = 0;
+  ticker.add(() => {
+    still = idle() ? still + 1 : 0;
+    // The frame that counts past `settle` is still drawn: the listeners of a tick all run.
+    if (still > settle) ticker.stop();
+  });
+  return () => {
+    still = 0;
+    if (ticker.started) return;
+    ticker.start();
+    gsap.updateRoot(ticker.lastTime / 1000);
+  };
 }
 
 /**

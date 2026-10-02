@@ -1,7 +1,9 @@
 import { gsap } from 'gsap';
+import { Graphics, type Container, type GraphicsContext } from 'pixi.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BLANK, scriptsOf } from './__fixtures__/scripts.js';
 import { cardAt, chipAt, footprint, layout } from './layout.js';
+import { EMPTY_PICTURE } from './picture.js';
 import { Stage } from './stage.js';
 
 /** GSAP on a clock this test turns by hand — the same seam Pixi's ticker drives in the app. */
@@ -241,6 +243,63 @@ describe('the active hand', () => {
         expect(s.tintAt(i, 0)).toBe(i === active ? 0xffffff : 0x8c8c8c),
       );
       expect(s.describe().dimmed).toHaveLength(script.to.hands.length - 1);
+    }
+    s.destroy();
+  });
+});
+
+describe('letting go', () => {
+  it('a chip stack taken off the table takes its drawing — and its GPU geometry — with it', () => {
+    // 500 rounds leaked two WebGL buffers and a vertex array each: `destroy({ children: true })`
+    // leaves a Graphics' own context alive (perf.mjs's heap check, P1).
+    const contexts = (root: Container): GraphicsContext[] => [
+      ...(root instanceof Graphics ? [root.context] : []),
+      ...root.children.flatMap((c) => contexts(c)),
+    ];
+    const [round] = scriptsOf(5).filter((sc) => (sc.cues.at(-1)?.after.hands.length ?? 0) > 0);
+    const last = round?.cues.at(-1)?.after;
+    if (last === undefined) throw new Error('no picture with a hand');
+    const s = stage();
+    s.render(last);
+    const before = contexts(s.root);
+    s.render(EMPTY_PICTURE);
+    const kept = new Set(contexts(s.root));
+    const dropped = before.filter((c) => !kept.has(c));
+    expect(dropped.length).toBeGreaterThan(0);
+    expect(dropped.filter((c) => !c.destroyed)).toEqual([]);
+    s.destroy();
+  });
+});
+
+describe('frames on demand', () => {
+  it('is idle only with nothing playing and nothing in flight, and wakes before every change', () => {
+    const [deal] = scriptsOf(5);
+    if (deal === undefined) throw new Error('no script');
+    let wakes = 0;
+    const s = new Stage({
+      textures: BLANK,
+      width: 390,
+      height: 844,
+      format: (m) => `€${m / 100}`,
+      wake: () => (wakes += 1),
+    });
+    expect(s.idle).toBe(true);
+    const before = wakes;
+    const playback = s.play(deal.cues);
+    expect(wakes).toBeGreaterThan(before);
+    expect(s.idle).toBe(false);
+    for (let f = 0; !playback.done && f < 2000; f += 1) advance(16);
+    advance(1000);
+    expect(s.idle).toBe(true);
+    for (const change of [
+      () => s.render(EMPTY_PICTURE),
+      () => s.resize(400, 800),
+      () => s.setFelt('Blackjack pays 3 to 2'),
+      () => s.propose({ kind: 'double', hand: 0, stake: 500, ms: 200 }).withdraw(),
+    ]) {
+      const was = wakes;
+      change();
+      expect(wakes).toBeGreaterThan(was);
     }
     s.destroy();
   });
