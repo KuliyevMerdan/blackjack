@@ -541,7 +541,7 @@ After landing (2026-10-03), from a real phone and the probes rerun:
 - **Chrome on an iPhone hid the top of the page** under its address bar. The table is now a box in
   the document's flow, `100svh` high, the canvas and the HUD inside it, and the felt's band is
   measured from the stage's own corner — not `position: fixed` to a viewport Chrome draws under.
-  Unverified until seen on the device (CLAUDE.md § Gaps).
+  Checked on the iPhone that reported it, in Chrome and Safari: the whole table in view.
 - **An idle table drew 60–120 frames a second.** `framesOnDemand` stops Pixi's ticker after ten
   still frames and the stage wakes it before any change — bringing GSAP's clock to the present
   first, or a script after a quiet minute would open a minute in (tested). `perf.mjs` now counts

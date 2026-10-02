@@ -328,12 +328,9 @@ writing:
   WebGL falls back to SwiftShader, rAF runs at 30 Hz idle or not, and native GL stalls show up as
   50–90 ms long tasks with almost no JS in them; it measures the machine, not the table. A real
   device, through remote debugging against the live link, needs a phone in hand, which no script in
-  this repository can stand in for. Open after P1 — the live link is up; the measurement is not.
-- **The top of the page in Chrome on an iPhone.** Reported 2026-10-03 from a real iPhone: Chrome
-  hid the HUD under its address bar (Safari, its bar at the bottom, and Android were fine). The
-  table is now a box in the document's flow, `100svh` high, instead of `position: fixed` — the
-  likely cause, since Chrome on iOS moves only the flow below its bar. No iPhone or full Xcode
-  here to see it: **open until checked on the device.**
+  this repository can stand in for. Open after P1: the live link has been played on an Android
+  phone and an iPhone (Safari and Chrome, 2026-10-03) and looks right on both, but no frame rate
+  was measured there.
 
 ## Rules
 
