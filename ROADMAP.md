@@ -506,8 +506,10 @@ _1–2 days._
       verifier — commit, memory and replay ✓, the forced shoe `!`, verdict *not verifiable*: a
       forced round is never called verified (§9), and that is what "verified in the browser" can
       honestly mean for one. `stranger.spec`, nothing but the page: deal until a pair, split, go
-      offline with the next reply lost, press, see Reconnecting… then Online, verify — four ✓ and
-      the replay exactly the moves pressed; 10/10 runs locally, 12–36 s each.
+      offline and press — Reconnecting…, Offline, then back online and Online *by itself*, the move
+      offered again because it never left — then lose the next reply and press: the move lands
+      once; verify — four ✓ and the replay exactly the moves pressed. 20–48 s a run locally, and
+      the same with the page's CPU throttled 6× (`E2E_CPU=6`, a CI runner on a laptop).
 - [x] **README** (2026-10-02) — the GIF above the fold (`scripts/gif.mjs`, recorded from the forced
       spec's shoe at the table's own pace), the two ADRs in a paragraph each, the edge table, and
       "try to break it": play, split, break the lab, verify from the history — the link it gives is
@@ -524,6 +526,11 @@ Found on the way, and fixed in this block:
 - **Offline was a place to stay.** CI's first run of the stranger against the image ran its retries
   out (an outage, then a lost reply on the last try) and sat on *Offline* with the move already
   applied. The table now keeps asking where the round is until it hears, and lands on it.
+- **Turbo with reduced motion froze the table.** Declining insurance with both on scripts four
+  cues at 0 for 0 ms; GSAP takes a zero-length timeline given a `timeScale` for finished and fires
+  none of its calls, so the decision gate waited forever — CI's stranger found it on a dealer's ace.
+  The stage no longer scales a timeline with nothing to wait for (test: every cue heard, before and
+  after turbo is set).
 - **A phone held sideways** gets the controls in a column at the right and the felt beside them:
   cards 51 px wide instead of the layout's 16 px floor.
 - **The lab** went on claiming "the next reply lost" after the server had spent it; it re-reads a

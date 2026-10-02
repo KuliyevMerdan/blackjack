@@ -248,7 +248,9 @@ export class Stage {
       );
     });
     timeline.set({}, {}, end / 1000);
-    timeline.timeScale(this.speed);
+    // Never on a timeline of zero length (reduced motion with nothing held): GSAP takes a scaled
+    // zero-length timeline for finished and fires none of its calls — the gate would wait forever.
+    if (end > 0) timeline.timeScale(this.speed);
     this.timeline = timeline;
     return {
       get cue() {
@@ -299,7 +301,7 @@ export class Stage {
    */
   setSpeed(speed: number): void {
     this.speed = speed > 0 ? speed : 1;
-    this.timeline?.timeScale(this.speed);
+    if (this.timeline !== null && this.timeline.duration() > 0) this.timeline.timeScale(this.speed);
     for (const tween of this.tweens) tween.timeScale(this.speed);
   }
 

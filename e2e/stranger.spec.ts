@@ -19,6 +19,11 @@ import {
  * Nothing but the page: no dev hooks, no forced shoe, no request touched. So it runs against the
  * local server in CI and, unchanged, against the live demo (`E2E_BASE_URL=… pnpm e2e:live`). The
  * shuffle is real, so the stranger deals until a pair comes — standing on everything else.
+ *
+ * The break, after the split, is both ends of the wire in turn: this browser offline until the
+ * client gives up (the move never left; the table must find its own way back and offer it again),
+ * then the server applying the move and hanging up unanswered (the retry must get the stored reply).
+ * Each waits on what the page says, never on how fast the backoff runs — CI runners are slow.
  */
 test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand', async ({
   browser,
@@ -49,16 +54,15 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
       };
       const action = choose();
       if (pressed.includes('split') && !broke && action !== 'noInsurance') {
-        // Mid-hand, after the split, the lab breaks both ends: this browser goes offline, and the
-        // server will apply the next move it hears and hang up without answering.
-        const lab = page.locator('[data-open="lab"]');
-        await lab.click();
-        await page.locator('[data-fault="drop"]').click();
-        await expect(page.locator('[data-lab-state]')).toHaveText('Now: the next 1 reply lost.');
-        await page.locator('[data-fault="offline"]').check();
-        await lab.click();
         broke = true;
-        // The pill's states as they change — "Reconnecting…" while the client backs off.
+        const lab = page.locator('[data-open="lab"]');
+        const toggle = async (fault: 'drop' | 'offline' | 'online') => {
+          await lab.click();
+          if (fault === 'drop') await page.locator('[data-fault="drop"]').click();
+          else await page.locator('[data-fault="offline"]').setChecked(fault === 'offline');
+          await lab.click();
+        };
+        // The pill's states as they change.
         await status.evaluate((pill) => {
           const seen: string[] = [];
           Object.assign(window, { seenStates: seen });
@@ -67,23 +71,30 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
             if (state !== (seen.at(-1) ?? 'online')) seen.push(state);
           }).observe(pill, { attributes: true });
         });
+
+        // 1. Mid-hand, after the split, this browser goes offline and the stranger presses on. The
+        //    client retries, gives up, and says so — the move never left this browser.
+        await toggle('offline');
         await press(page, action);
         await expect(status).toHaveText('Reconnecting…');
-        // Back online inside the backoff: the retry lands, the server applies it and hangs up, and
-        // the next try under the same id gets the stored answer. (Chromium may make that try
-        // itself: a POST cut off on a reused keep-alive socket before any byte came back is
-        // resent by the browser. Either way it is the same request, and the server knows it.)
-        await lab.click();
-        await page.locator('[data-fault="offline"]').uncheck();
-        await lab.click();
-        // If the outage outlasted the retries, the pill said Offline — and the table kept asking
-        // where the round is until it heard. Either way it ends Online, by itself.
+        await expect(status).toHaveText('Offline — your table is saved', { timeout: 30_000 });
+        await expect(page.locator('[data-message]')).toContainText('Your last move is safe');
+        // 2. Back online, the table finds its own way back — nothing to press, nothing to reload —
+        //    and offers the same move again, because it never happened.
+        await toggle('online');
         await expect(status).toHaveText('Online', { timeout: 30_000 });
         const seen: unknown = await page.evaluate(() => Reflect.get(window, 'seenStates'));
-        expect(Array.isArray(seen) && seen[0]).toBe('retrying');
-        expect(Array.isArray(seen) && seen.at(-1)).toBe('online');
-        // …and the lab no longer claims a fault the server has spent.
-        await expect(page.locator('[data-lab-state]')).toHaveText('No faults.');
+        expect(seen).toEqual(['retrying', 'offline', 'online']);
+        await expect(page.locator(`[data-action="${action}"]`)).toBeEnabled({ timeout: 15_000 });
+        // 3. Now the other end breaks: the server applies the move and hangs up unanswered. The
+        //    retry under the same id is answered from the stored reply — one move, not two.
+        await toggle('drop');
+        await expect(page.locator('[data-lab-state]')).toHaveText('Now: the next 1 reply lost.');
+        await press(page, action);
+        await expect(page.locator('[data-lab-state]')).toHaveText('No faults.', {
+          timeout: 30_000,
+        });
+        await expect(status).toHaveText('Online', { timeout: 30_000 });
       } else {
         await press(page, action);
       }

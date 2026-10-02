@@ -21,6 +21,12 @@ export async function stranger(browser: Browser, reduced = false): Promise<Page>
     errors.set(p, seen);
     p.on('pageerror', (e) => seen.push(e.message));
   });
+  // `E2E_CPU=6` runs the page six times slower — a CI runner drawing WebGL in software, on a laptop.
+  const slow = Number(process.env['E2E_CPU'] ?? '1');
+  if (slow > 1) {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: slow });
+  }
   await page.goto(reduced ? '/?turbo&reduced' : '/?turbo');
   await expect(page.locator('[data-status]')).toHaveText('Online', { timeout: 60_000 });
   return page;

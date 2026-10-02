@@ -259,6 +259,29 @@ describe('turbo', () => {
     s.setSpeed(1);
     s.destroy();
   });
+
+  it('plays a script with nothing to wait for — reduced motion, no holds — under turbo too', () => {
+    // Insurance declined under reduced motion: insure, peek, active, decision, all at 0 for 0 ms.
+    // A zero-length GSAP timeline given a timeScale counted itself finished without one callback,
+    // and the decision gate waited for a cue that never came.
+    const [deal] = scriptsOf(5);
+    if (deal === undefined) throw new Error('no script');
+    const flat = deal.cues.map((c) => ({ ...c, at: 0, ms: 0, hold: 0 }));
+    for (const when of ['before', 'after'] as const) {
+      const s = stage();
+      const heard: number[] = [];
+      if (when === 'before') s.setSpeed(2.5);
+      const playback = s.play(flat, (_cue, i) => heard.push(i));
+      if (when === 'after') s.setSpeed(2.5);
+      advance(16);
+      expect({ when, done: playback.done, heard: heard.length }).toEqual({
+        when,
+        done: true,
+        heard: flat.length,
+      });
+      s.destroy();
+    }
+  });
 });
 
 describe('layout', () => {
