@@ -38,9 +38,16 @@ test('a stranger splits, loses a reply mid-hand, recovers, and verifies the hand
   let broke = false;
   let before = 0;
 
+  const took: number[] = [];
+  let last = started;
   while (!broke) {
     const waited = Math.round((Date.now() - started) / 1000);
-    expect(hands < 40 && waited < 100, `${hands} hands in ${waited} s and no pair yet`).toBe(true);
+    expect(
+      hands < 40 && waited < 100,
+      `${hands} hands in ${waited} s and no pair yet; seconds a hand: ${took.join(' ')}`,
+    ).toBe(true);
+    if (hands > 0) took.push(Math.round((Date.now() - last) / 100) / 10);
+    last = Date.now();
     hands += 1;
     before = await balanceOf(page);
     pressed = [];
