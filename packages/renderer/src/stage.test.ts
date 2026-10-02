@@ -48,7 +48,7 @@ describe('Stage — two paths, one picture', () => {
       snapped.destroy();
     }
     expect(wrong.slice(0, 2)).toEqual([]);
-  });
+  }, 60_000);
 
   it('skipping from every cue — and from halfway through it — lands on the same table', () => {
     const wrong: unknown[] = [];
@@ -77,7 +77,7 @@ describe('Stage — two paths, one picture', () => {
       }
     }
     expect(wrong.slice(0, 2)).toEqual([]);
-  });
+  }, 60_000);
 
   it('keeps nothing behind across 500 rounds: one sprite per card on the table, no tweens', () => {
     const s = stage();
@@ -93,7 +93,7 @@ describe('Stage — two paths, one picture', () => {
       (last?.to.dealer.length ?? 0) + (last?.to.hands.reduce((n, h) => n + h.cards.length, 0) ?? 0);
     expect(s.stats()).toEqual({ cards: onTable, sprites: onTable, tweens: 0, playing: false });
     s.destroy();
-  });
+  }, 60_000);
 
   it('a split moves the pair’s second card to the new hand — it does not deal a new one', () => {
     let checked = 0;

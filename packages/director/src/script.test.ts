@@ -33,7 +33,7 @@ describe('every script ends in its snapshot’s picture', () => {
     }
     expect(wrong.slice(0, 3)).toEqual([]);
     expect(steps).toBeGreaterThan(5000);
-  });
+  }, 60_000);
 });
 
 describe('the deal', () => {
@@ -132,5 +132,5 @@ describe('pace', () => {
     expect(median).toBeGreaterThan(3000);
     expect(median).toBeLessThan(6000);
     console.info(`round animation at NORMAL: median ${median} ms, p90 ${p90} ms`);
-  });
+  }, 60_000);
 });

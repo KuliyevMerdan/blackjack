@@ -311,6 +311,10 @@ a work queue, not an archive.
 
 ### Other rules
 
+- **A test that loops over thousands of rounds carries its own timeout** (`it(…, 60_000)`), and
+  asserts once at the end rather than per iteration. Vitest's 5 s default holds on a laptop and
+  not on a CI runner shared with every other suite — it has failed CI three times (money S3,
+  integration S4, director C1).
 - **The protocol document and `packages/protocol` change together**, in one commit, always.
 - **No `any`, no non-null `!`, no `as` outside a parser boundary.** `strict`,
   `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`; the bans are lint errors in every unit's
