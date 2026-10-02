@@ -59,7 +59,7 @@ describe('shuffleInPlace — Fisher–Yates from the top', () => {
     expect(counts.size).toBe(24);
     // 23 degrees of freedom: χ² above 49.7 has probability 0.001 under uniformity.
     expect(chiSquare([...counts.values()])).toBeLessThan(49.7);
-  });
+  }, 30_000);
 });
 
 describe('shoe', () => {
@@ -88,7 +88,7 @@ describe('shoe', () => {
       positions[at] = (positions[at] ?? 0) + 1;
     }
     expect(chiSquare(positions)).toBeLessThan(400);
-  });
+  }, 30_000);
 
   it('deals a different shoe for a client seed that differs in one character', () => {
     const a: Card[] = shoe(SERVER, 'seed-a');

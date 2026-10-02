@@ -56,12 +56,20 @@ describe('ratio, payout and half — exact or nothing', () => {
   });
 
   it('pays every stake a multiple of an even unit exactly, at every ratio the game uses', () => {
+    // One `expect` at the end, not three per stake: 150,000 matcher calls timed out on a busy CI
+    // runner while the arithmetic itself takes milliseconds.
+    const wrong: number[] = [];
     for (let stake = 2; stake <= 100_000; stake += 2) {
       const amount = minor(stake);
-      expect(payout(amount, 5, 2) * 2).toBe(stake * 5);
-      expect(half(amount) * 2).toBe(stake);
-      expect(payout(half(amount), 3, 1)).toBe((stake / 2) * 3);
+      if (
+        payout(amount, 5, 2) * 2 !== stake * 5 ||
+        half(amount) * 2 !== stake ||
+        payout(half(amount), 3, 1) !== (stake / 2) * 3
+      ) {
+        wrong.push(stake);
+      }
     }
+    expect(wrong).toEqual([]);
   });
 
   it('refuses an inexact result instead of rounding it', () => {
