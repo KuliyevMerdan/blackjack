@@ -337,6 +337,35 @@ describe('layout', () => {
     expect(layout(1280, 800, { dealer: 2, hands: [6, 6, 6, 6] }).rows).toBe(1);
   });
 
+  it('a phone held sideways, controls in a column at the right: every card on the felt beside it', () => {
+    // 812 × 375 as measured in Chromium: the HUD ends at 64, the column starts at 564.
+    const insets = { top: 70, bottom: 363, right: 558 };
+    const wrong: unknown[] = [];
+    let smallest = Infinity;
+    for (let count = 1; count <= 4; count += 1) {
+      for (const cards of [2, 6, 9]) {
+        const l = layout(
+          812,
+          375,
+          { dealer: 7, hands: Array.from({ length: count }, () => cards) },
+          insets,
+        );
+        smallest = Math.min(smallest, l.cardWidth);
+        const last = cardAt(l, 'dealer', 6);
+        if (l.shoe.x + l.cardWidth / 2 > insets.right || last.x + l.cardWidth / 2 > insets.right)
+          wrong.push({ count, cards, dealer: true });
+        for (let i = 0; i < count; i += 1) {
+          const box = footprint(l, i, cards);
+          if (box.left < 0 || box.right > insets.right || box.top < l.top || box.bottom > l.bottom)
+            wrong.push({ count, cards, hand: i, box });
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+    // Under a bar of controls the same phone left cards at the layout's 16 px floor.
+    expect(smallest).toBeGreaterThanOrEqual(36);
+  });
+
   it('places a hand by the number of hands alone, so a split’s stake can go there first', () => {
     const before = layout(390, 844, { dealer: 2, hands: [1, 2] });
     const after = layout(390, 844, { dealer: 2, hands: [1, 7] });

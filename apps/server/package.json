@@ -27,6 +27,7 @@
     "@blackjack/fair": "workspace:*",
     "@blackjack/money": "workspace:*",
     "@blackjack/protocol": "workspace:*",
+    "@fastify/static": "catalog:",
     "better-sqlite3": "catalog:",
     "fastify": "catalog:",
     "pino": "catalog:",

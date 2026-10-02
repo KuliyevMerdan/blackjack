@@ -44,3 +44,64 @@ jobs:
 
       - name: Formatting
         run: pnpm run format:check
+
+      # Last, and only once everything above is green: a browser is the slowest thing in the run.
+      - name: Chromium for the E2E suite
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E (four hands from a forced pair, paid and replayed; a stranger's split, broken and verified)
+        run: pnpm run e2e
+
+      - name: E2E traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: test-results/
+          retention-days: 7
+
+  # The image Render deploys, built and run as Render runs it — a production server, the lab on — and
+  # the stranger spec played against it through nothing but the page.
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t blackjack .
+
+      - name: Run it
+        run: |
+          docker run -d --name table -p 8080:8080 -e BJ_FAULTS=on blackjack
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8080/ready && exit 0; sleep 1; done
+          docker logs table; exit 1
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: The stranger, against the image
+        run: pnpm run e2e:live
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+
+      - name: Server log
+        if: always()
+        run: docker logs table
+
+      - name: E2E traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-e2e-traces
+          path: test-results/
+          retention-days: 7

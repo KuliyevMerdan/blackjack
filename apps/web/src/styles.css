@@ -287,6 +287,29 @@ kbd {
     display: none;
   }
 }
+/*
+ * A phone held sideways: 375 px is too short for a HUD, a table and a bar of controls stacked, so
+ * the controls stand in a column at the right and the felt takes the full height beside them
+ * (boot.ts measures the column's left edge and hands it to the layout as `right`).
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  .controls {
+    position: absolute;
+    top: 76px;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: 232px;
+    height: auto;
+    justify-content: flex-end;
+  }
+  .actions {
+    flex-direction: column;
+  }
+  .actions button {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
 .controls output {
   min-width: 72px;
   text-align: center;

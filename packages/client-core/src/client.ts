@@ -229,7 +229,16 @@ export class Client {
       if (sent.kind === 'lost') return { kind: 'failed', reason: sent.reason };
       const reply = roundReply.safeParse(sent.body);
       if (!reply.success) return this.answerError(sent.body);
-      this.replace('resync', { ...truth, ...reply.data }, []);
+      // `GET /api/round` names only an open round. Nothing open, and the wallet and the commit where
+      // this client's settled round left them: nothing has happened since, and the server's `null`
+      // is that round, over — kept, so a tab back in view still shows how its hand ended. (Any deal
+      // since, from any tab, would have moved the commit.)
+      const unmoved =
+        reply.data.round === null &&
+        truth.round?.phase === 'SETTLED' &&
+        reply.data.balance === truth.balance &&
+        reply.data.commit === truth.commit;
+      if (!unmoved) this.replace('resync', { ...truth, ...reply.data }, []);
       return { kind: 'ok' };
     });
   }

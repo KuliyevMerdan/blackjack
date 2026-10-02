@@ -13,16 +13,20 @@ export interface Shape {
 /**
  * The felt's free band, in CSS pixels from the top: below the HUD, above the controls. The app
  * measures its DOM and hands these in; without them a layout assumes a HUD and a control bar of a
- * phone's usual size.
+ * phone's usual size. `right`, from the left edge, when the controls stand in a column beside the
+ * felt instead of under it — a phone held sideways, too short for a bar under the table.
  */
 export interface Insets {
   readonly top: number;
   readonly bottom: number;
+  readonly right?: number;
 }
 
 export interface Layout {
   readonly width: number;
   readonly height: number;
+  /** The felt's width: `width`, less a column of controls at the right. */
+  readonly felt: number;
   readonly cardWidth: number;
   readonly cardHeight: number;
   /** Hands per row, and how many rows: four hands on a phone held upright take two. */
@@ -71,7 +75,9 @@ const DEALER_UNDER = 40;
  * A hand's place depends only on how many hands there are, never on how many cards they hold: a
  * split's new stake can be sent to where its hand will be before the server has said so.
  */
-export function layout(width: number, height: number, shape: Shape, insets?: Insets): Layout {
+export function layout(viewWidth: number, height: number, shape: Shape, insets?: Insets): Layout {
+  // Everything below is placed across the felt, which is the screen unless a column takes its right.
+  const width = Math.round(Math.min(viewWidth, insets?.right ?? viewWidth));
   const count = Math.max(1, shape.hands.length);
   const rows = count > 2 && width < height ? 2 : 1;
   const columns = Math.ceil(count / rows);
@@ -121,8 +127,9 @@ export function layout(width: number, height: number, shape: Shape, insets?: Ins
   // Capped so a stack and the two lines beside it always fit in `UNDER`.
   const chip = Math.min(16, Math.max(9, Math.round(cardWidth * 0.2)));
   return {
-    width,
+    width: viewWidth,
     height,
+    felt: width,
     cardWidth,
     cardHeight,
     columns,

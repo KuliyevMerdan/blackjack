@@ -13,3 +13,7 @@ packages/fair/src/__fixtures__/golden.ts
 
 # Reports written by `pnpm load` — kept as the tool wrote them
 docs/load/*.json
+
+# Playwright output
+test-results/
+playwright-report/

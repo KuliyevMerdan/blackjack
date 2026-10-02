@@ -111,6 +111,11 @@ export function mountLab(root: HTMLElement, client: Client, offline: Offline): v
     offline.on = offlineBox.checked;
     render();
   });
+  // "The next reply lost" is a countdown the server spends; after each move, while one is pending,
+  // the lab asks again (an empty patch changes nothing), so it never claims a fault already spent.
+  client.onBusy((busy) => {
+    if (!busy && shown !== null && (shown.dropNext > 0 || shown.stormNext > 0)) void send({});
+  });
   sheet.querySelector('[data-fault="reset"]')?.addEventListener('click', () => {
     offline.on = false;
     void send({ latencyMs: 0, dropRate: 0, unavailableRate: 0, dropNext: 0, stormNext: 0 });

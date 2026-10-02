@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "typecheck": "tsc -p tsconfig.json && turbo run typecheck",
+    "typecheck": "tsc -p tsconfig.json && tsc -p e2e/tsconfig.json && turbo run typecheck",
     "test": "turbo run test",
     "test:root": "vitest run",
     "lint": "eslint . && pnpm run lint:boundaries",
@@ -20,11 +20,14 @@
     "prepare": "husky",
     "sim": "turbo run build --filter=@blackjack/sim... --output-logs=errors-only && node tools/sim/dist/main.js",
     "dev": "turbo run dev --filter=@blackjack/server --filter=@blackjack/web",
-    "load": "turbo run build --filter=@blackjack/load... --filter=@blackjack/server... --output-logs=errors-only && node tools/load/dist/main.js"
+    "load": "turbo run build --filter=@blackjack/load... --filter=@blackjack/server... --output-logs=errors-only && node tools/load/dist/main.js",
+    "e2e": "turbo run build --filter=@blackjack/web --filter=@blackjack/server --output-logs=errors-only && playwright test --config e2e/playwright.config.ts",
+    "e2e:live": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@blackjack/protocol": "workspace:*",
     "@eslint/js": "^9",
+    "@playwright/test": "catalog:",
     "@types/node": "^20",
     "dependency-cruiser": "^16",
     "eslint": "^9",

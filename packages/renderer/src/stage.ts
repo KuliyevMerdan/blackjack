@@ -289,7 +289,7 @@ export class Stage {
     const first = this.place.hands[0];
     const y =
       first === undefined ? this.options.height / 2 : first.y - this.place.cardHeight * 1.25;
-    this.print.position.set(this.options.width / 2, Math.round(y));
+    this.print.position.set(this.place.felt / 2, Math.round(y));
   }
 
   /**
@@ -614,11 +614,11 @@ export class Stage {
 
   private drawFelt(): void {
     const { width, height } = this.options;
+    const place = this.lay(shapeOf(EMPTY_PICTURE));
     this.felt.clear().rect(0, 0, width, height).fill({ color: 0x0f5132 });
     this.felt
-      .ellipse(width / 2, height * 0.05, width * 0.62, height * 0.78)
+      .ellipse(place.felt / 2, height * 0.05, place.felt * 0.62, height * 0.78)
       .stroke({ width: 2, color: 0xe9d8a6, alpha: 0.25 });
-    const place = this.lay(shapeOf(EMPTY_PICTURE));
     this.shoe.position.set(place.shoe.x, place.shoe.y);
     const frame = this.shoe.texture.frame.width;
     this.shoe.scale.set(frame > 0 ? place.cardWidth / frame : 1);

@@ -23,6 +23,11 @@ export interface ServerConfig {
    * how the live demo's network lab works.
    */
   readonly faults: boolean;
+  /**
+   * `BJ_STATIC_DIR` — the built web app, served from `/` beside the API: one image, one origin
+   * (ADR-0003). `null` when the page is served elsewhere (Vite in development, the probes' preview).
+   */
+  readonly staticDir: string | null;
   readonly game: GameConfig;
   /** What a new session's wallet starts with — play money. */
   readonly startingBalance: Minor;
@@ -47,6 +52,7 @@ const env = z.object({
   BJ_DB: z.string().optional(),
   BJ_DEV: z.enum(['on', 'off']).optional(),
   BJ_FAULTS: z.enum(['on', 'off']).optional(),
+  BJ_STATIC_DIR: z.string().min(1).optional(),
   BJ_STARTING_BALANCE: int(100_000),
   BJ_MIN_BET: int(DEFAULT_GAME.minBet),
   BJ_MAX_BET: int(DEFAULT_GAME.maxBet),
@@ -96,6 +102,7 @@ export function readConfig(source: Record<string, string | undefined>): ServerCo
     database: e.BJ_DB ?? ':memory:',
     dev: (e.BJ_DEV ?? 'off') === 'on',
     faults: (e.BJ_FAULTS ?? 'off') === 'on',
+    staticDir: e.BJ_STATIC_DIR ?? null,
     game: game.data,
     startingBalance: minor(e.BJ_STARTING_BALANCE),
     logLevel: e.LOG_LEVEL,

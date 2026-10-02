@@ -26,6 +26,12 @@ describe('readConfig', () => {
     expect(readConfig({}).faults).toBe(false);
   });
 
+  it('names the built web app’s directory, or none', () => {
+    expect(readConfig({ BJ_STATIC_DIR: '/app/web' }).staticDir).toBe('/app/web');
+    expect(readConfig({}).staticDir).toBeNull();
+    expect(() => readConfig({ BJ_STATIC_DIR: '' })).toThrow(/BJ_STATIC_DIR/);
+  });
+
   it('refuses a table whose stakes could make an inexact payout', () => {
     expect(() => readConfig({ BJ_MIN_BET: '150' })).toThrow(/multiple of betUnit/);
   });

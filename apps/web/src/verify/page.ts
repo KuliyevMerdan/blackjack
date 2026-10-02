@@ -42,7 +42,7 @@ export async function mountVerify(
   if (read.kind !== 'ok') {
     status.textContent =
       read.kind === 'unknown'
-        ? 'No settled round has that id. A round can be verified once it has settled.'
+        ? 'No settled round has that id. A round can be verified once it has settled — and on the live demo, which keeps no disk, until its server next restarts.'
         : `The record could not be fetched (${read.reason}). Try again in a moment.`;
     status.className = 'loading failed';
     return null;

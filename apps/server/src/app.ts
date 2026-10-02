@@ -1,8 +1,11 @@
+import { existsSync } from 'node:fs';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
+import path from 'node:path';
+import fastifyStatic from '@fastify/static';
 import { classOf, httpStatus, type ErrorReply } from '@blackjack/protocol';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Logger } from 'pino';
-import type { ServerConfig } from './config.js';
+import { BootError, type ServerConfig } from './config.js';
 import { Faults } from './faults.js';
 import { registerRoutes } from './http.js';
 import type { Store } from './store/store.js';
@@ -27,6 +30,8 @@ export interface Server {
 /** Everything wired, nothing listening — tests and `main.ts` both build the server through here. */
 export function createServer(deps: ServerDeps): Server {
   const { config, store, log } = deps;
+  // Checked before anything else is built, so a bad path names itself and opens nothing.
+  const webRoot = config.staticDir === null ? null : webAppRoot(config.staticDir);
   const table = new Table({ config, store, log, ...(deps.now ? { now: deps.now } : {}) });
   const app = Fastify<HttpServer, IncomingMessage, ServerResponse, FastifyBaseLogger>({
     loggerInstance: log,
@@ -56,6 +61,7 @@ export function createServer(deps: ServerDeps): Server {
 
   const faults = config.faults ? new Faults() : null;
   registerRoutes(app, { config, table, faults });
+  if (webRoot !== null) serveWebApp(app, webRoot);
 
   return {
     app,
@@ -70,6 +76,36 @@ export function createServer(deps: ServerDeps): Server {
       store.close();
     },
   };
+}
+
+/**
+ * The built web app from `/` (ADR-0003). Vite names every asset by its content hash, so those are
+ * cached for a year; `index.html` names the current ones and is asked for afresh every time, or a
+ * returning browser runs the last deploy's client against this deploy's server — the skew the
+ * protocol's parsers exist to catch, better not caused. The API's routes are registered first and
+ * are more specific, so no file can shadow `/api/*`, `/fair/*` or the probes.
+ */
+function serveWebApp(app: FastifyInstance, root: string): void {
+  void app.register(fastifyStatic, {
+    root,
+    cacheControl: false, // its own `max-age=0` would overwrite the header set below
+    setHeaders(res, file) {
+      res.setHeader(
+        'cache-control',
+        file.includes(`${path.sep}assets${path.sep}`)
+          ? 'public, max-age=31536000, immutable'
+          : 'no-cache',
+      );
+    },
+  });
+}
+
+function webAppRoot(dir: string): string {
+  const root = path.resolve(dir);
+  if (!existsSync(path.join(root, 'index.html'))) {
+    throw new BootError([`BJ_STATIC_DIR has no index.html: ${root}`]);
+  }
+  return root;
 }
 
 function statusOf(error: unknown): number {

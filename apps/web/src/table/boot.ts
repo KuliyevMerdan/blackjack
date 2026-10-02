@@ -46,14 +46,18 @@ export async function bootTable(
     history: () => client.history(),
   });
 
-  /** The felt's free band: under the HUD, over the controls — measured, not assumed. */
+  /**
+   * The felt's free band: under the HUD, over the controls — or, on a phone held sideways, beside
+   * them (styles.css puts them in a column at the right). Measured, not assumed.
+   */
   const insets = (): Insets => {
     const header = uiHost.querySelector('.hud')?.getBoundingClientRect();
     const controls = uiHost.querySelector('.controls')?.getBoundingClientRect();
-    return {
-      top: Math.ceil((header?.bottom ?? 52) + 6),
-      bottom: Math.floor((controls?.top ?? stageHost.clientHeight - 140) - 6),
-    };
+    const top = Math.ceil((header?.bottom ?? 52) + 6);
+    if (controls !== undefined && controls.left > stageHost.clientWidth / 2) {
+      return { top, bottom: stageHost.clientHeight - 12, right: Math.floor(controls.left - 6) };
+    }
+    return { top, bottom: Math.floor((controls?.top ?? stageHost.clientHeight - 140) - 6) };
   };
 
   const app = new Application();

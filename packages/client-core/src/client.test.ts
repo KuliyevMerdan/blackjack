@@ -467,6 +467,35 @@ describe('the network lab', () => {
   });
 });
 
+describe('resync after a settled round', () => {
+  it('keeps the round it saw settle while nothing has moved — and drops it once something has', async () => {
+    const server = new FakeServer();
+    const storage = inMemory();
+    const a = client(server.transport, { storage });
+    const b = client(server.transport, { storage });
+    await a.open();
+    await b.open();
+    const settle = async (c: Client) => {
+      await c.deal(STAKE);
+      while (c.state?.round && c.state.round.phase !== 'SETTLED') {
+        await c.act(c.state.round.allowed.includes('noInsurance') ? 'noInsurance' : 'stand');
+      }
+    };
+    await settle(a);
+    const shown = a.state?.round;
+    expect(shown?.phase).toBe('SETTLED');
+    // A tab back in view: the server has no open round, and nothing has happened since.
+    await a.resync();
+    expect(a.state?.round).toEqual(shown);
+    // Another tab plays a hand: the commit moves, and the old result is no longer the latest.
+    await settle(b);
+    await a.resync();
+    expect(a.state?.round).toBeNull();
+    expect(a.state?.commit).toBe(b.state?.commit);
+    expect(a.state?.balance).toBe(b.state?.balance);
+  });
+});
+
 describe('busy', () => {
   it('is announced as it starts and ends, whoever made the call', async () => {
     const server = new FakeServer();
