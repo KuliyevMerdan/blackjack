@@ -1,14 +1,25 @@
 import type { Change, Client, Outcome, Status } from '@blackjack/client-core';
-import { direct, pictureOf, type Pace } from '@blackjack/director';
+import { direct, NORMAL, pictureOf, REDUCED, type Cue } from '@blackjack/director';
 import { minor } from '@blackjack/money';
 import type { Action, GameConfig, Round } from '@blackjack/protocol';
-import type { Playback, StageCue, StagePicture } from '@blackjack/renderer';
+import type { Playback, Proposal, Proposed, StageCue, StagePicture } from '@blackjack/renderer';
+import { add, canAdd, chipsFor, dealable, fit, limitsOf } from './bet.js';
+import { TURBO_SPEED, type Settings } from './settings.js';
+import { calloutOf, promptOf, summaryOf, type Summary } from './words.js';
 
 /** The slice of the stage the table drives — the real `Stage`, or a test's recording. */
 export interface StageLike {
   render(picture: StagePicture): void;
   play(cues: readonly StageCue[], onCue?: (cue: StageCue, index: number) => void): Playback;
   finish(): void;
+  propose(move: Proposed): Proposal;
+  setSpeed(speed: number): void;
+}
+
+/** A chip on the rail, and whether it may go on the stake. */
+export interface Chip {
+  readonly value: number;
+  readonly enabled: boolean;
 }
 
 /** Everything the DOM layer shows, recomputed on every change — the view is a function of this. */
@@ -19,13 +30,22 @@ export interface View {
   readonly config: GameConfig | null;
   readonly round: Round | null;
   readonly stake: number;
+  readonly chips: readonly Chip[];
   /** The decision gate (ADR-0002): open once the screen has caught up with the truth. */
   readonly gateOpen: boolean;
   readonly busy: boolean;
   /** The decisions to offer — the truth's `allowed`, and only once the gate is open. */
   readonly actions: readonly Action[];
   readonly canDeal: boolean;
+  /** A refusal or a failure, in words. */
   readonly message: string | null;
+  /** What the last beat said that the felt alone might not: an offer, a peek, insurance. */
+  readonly callout: string | null;
+  /** The decision on screen, in words — for a screen reader, once the gate is open. */
+  readonly prompt: string | null;
+  /** The result moment: shown once the last result has played, gone at the next Deal. */
+  readonly summary: Summary | null;
+  readonly settings: Settings;
 }
 
 /**
@@ -34,20 +54,30 @@ export interface View {
  * director and played. The decision gate and the HUD are functions of the playback's position, not
  * of the truth alone: a button opens only for a decision the screen has already shown, and money
  * appears when the card that won it lands.
+ *
+ * **The one optimistic thing** (ADR-0002): on Double or Split the chips leave at the press. The
+ * cards wait for the reply; a refusal, a conflict or a failure sends the chips back, with the reason
+ * in words. The balance never moves at the press.
  */
 export class TableController {
   private playback: Playback | null = null;
   private hud: number | null = null;
-  private stake = 500;
+  private stake: number;
   private message: string | null = null;
+  private callout: string | null = null;
+  private settings: Settings;
   private readonly unsubscribe: (() => void)[] = [];
 
   constructor(
     private readonly client: Client,
     private readonly stage: StageLike,
     private readonly show: (view: View) => void,
-    private pace: Pace,
+    options: { readonly settings?: Settings; readonly stake?: number } = {},
+    private readonly format: (minor: number) => string = String,
   ) {
+    this.settings = options.settings ?? { turbo: false, reducedMotion: false };
+    this.stake = options.stake ?? 500;
+    this.stage.setSpeed(this.settings.turbo ? TURBO_SPEED : 1);
     this.unsubscribe.push(
       client.subscribe((change) => this.onChange(change)),
       client.onStatus(() => this.emit()),
@@ -59,8 +89,11 @@ export class TableController {
     this.emit();
   }
 
-  setPace(pace: Pace): void {
-    this.pace = pace;
+  /** Turbo takes effect at once, mid-round; reduced motion from the next reply. */
+  configure(settings: Settings): void {
+    this.settings = settings;
+    this.stage.setSpeed(settings.turbo ? TURBO_SPEED : 1);
+    this.emit();
   }
 
   /** A tap, a key, a hidden tab: the screen snaps to the truth it was heading for. */
@@ -68,25 +101,39 @@ export class TableController {
     this.playback?.skip();
   }
 
-  changeStake(direction: 1 | -1): void {
-    const config = this.client.state?.config;
-    if (!config) return;
-    const at = CHIPS.findIndex((c) => c >= this.stake);
-    const next = CHIPS[Math.max(0, Math.min(CHIPS.length - 1, at + direction))] ?? this.stake;
-    this.stake = Math.min(config.maxBet, Math.max(config.minBet, next));
+  addChip(chip: number): void {
+    const limits = this.limits();
+    if (limits === null || !this.betting()) return;
+    this.stake = add(this.stake, chip, limits);
+    this.emit();
+  }
+
+  clearStake(): void {
+    if (!this.betting()) return;
+    this.stake = 0;
     this.emit();
   }
 
   async deal(): Promise<void> {
     if (!this.view().canDeal) return;
     this.message = null;
-    this.say(await this.client.deal(minor(this.stake)));
+    this.callout = null;
+    const sent = this.client.deal(minor(this.view().stake));
+    this.emit(); // busy: the last result goes, and Deal greys, at the press
+    this.say(await sent);
   }
 
   async act(action: Action): Promise<void> {
-    if (!this.view().actions.includes(action)) return;
+    const view = this.view();
+    if (!view.actions.includes(action)) return; // a press with the gate shut, or a double tap
     this.message = null;
-    this.say(await this.client.act(action));
+    this.callout = null;
+    const proposal = this.propose(action, view.round);
+    const sent = this.client.act(action);
+    this.emit();
+    const outcome = await sent;
+    if (outcome.kind !== 'ok') proposal?.withdraw();
+    this.say(outcome);
   }
 
   dispose(): void {
@@ -109,16 +156,15 @@ export class TableController {
       this.emit();
       return;
     }
-    const script = direct(
-      previous?.round ?? null,
-      events,
-      requireRound(next),
-      next.balance,
-      this.pace,
-    );
+    const pace = this.settings.reducedMotion ? REDUCED : NORMAL;
+    const script = direct(previous?.round ?? null, events, requireRound(next), next.balance, pace);
     this.hud = script.hudBefore;
     const playback = this.stage.play(script.cues, (_cue, index) => {
-      this.hud = script.cues[index]?.hud ?? this.hud;
+      const cue: Cue | undefined = script.cues[index];
+      this.hud = cue?.hud ?? this.hud;
+      const said = cue === undefined ? null : calloutOf(cue.beat, this.format);
+      // Every line of one reply stays: the press cleared the last reply's.
+      if (said !== null) this.callout = this.callout === null ? said : `${this.callout} ${said}`;
       this.emit();
     });
     this.playback = playback;
@@ -128,6 +174,16 @@ export class TableController {
       this.hud = next.balance;
       this.emit();
     });
+  }
+
+  /** Double and Split send their chips at the press; nothing else is shown before the reply. */
+  private propose(action: Action, round: Round | null): Proposal | null {
+    if ((action !== 'double' && action !== 'split') || round === null) return null;
+    const hand = round.activeHand;
+    const stake = hand === null ? undefined : round.hands[hand]?.stake;
+    if (hand === null || stake === undefined) return null;
+    const pace = this.settings.reducedMotion ? REDUCED : NORMAL;
+    return this.stage.propose({ kind: action, hand, stake, ms: pace.chips });
   }
 
   private say(outcome: Outcome): void {
@@ -141,23 +197,48 @@ export class TableController {
     this.emit();
   }
 
+  private limits() {
+    const truth = this.client.state;
+    return truth === null ? null : limitsOf(truth.config, truth.balance);
+  }
+
+  /** Between rounds, with the screen caught up: the only time the stake may change. */
+  private betting(): boolean {
+    const round = this.client.state?.round ?? null;
+    return (round === null || round.phase === 'SETTLED') && !this.client.busy;
+  }
+
   view(): View {
     const truth = this.client.state;
     const round = truth?.round ?? null;
     const gateOpen = this.playback === null || this.playback.done;
     const busy = this.client.busy;
     const open = round !== null && round.phase !== 'SETTLED';
+    const limits = this.limits();
+    const stake = limits === null ? this.stake : fit(this.stake, limits);
+    const caughtUp = gateOpen && !busy;
     return {
       status: this.client.status,
       hud: this.hud,
       config: truth?.config ?? null,
       round,
-      stake: this.stake,
+      stake,
+      chips:
+        limits === null
+          ? []
+          : chipsFor(limits).map((value) => ({
+              value,
+              enabled: !open && !busy && canAdd(stake, value, limits),
+            })),
       gateOpen,
       busy,
-      actions: gateOpen && !busy && round !== null ? round.allowed : [],
-      canDeal: truth !== null && !open && gateOpen && !busy,
+      actions: caughtUp && round !== null ? round.allowed : [],
+      canDeal: limits !== null && !open && caughtUp && dealable(stake, limits),
       message: this.message,
+      callout: this.callout,
+      prompt: caughtUp && round !== null ? promptOf(round) : null,
+      summary: caughtUp && round !== null ? summaryOf(round, this.format) : null,
+      settings: this.settings,
     };
   }
 
@@ -165,9 +246,6 @@ export class TableController {
     this.show(this.view());
   }
 }
-
-/** The stakes the chip buttons step through, in minor units. */
-export const CHIPS = [100, 200, 500, 1000, 2000, 5000, 10_000];
 
 function requireRound(truth: Change['next']): Round {
   if (truth.round === null) throw new Error('a reply with events always carries its round');

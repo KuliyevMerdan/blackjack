@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --config ../../config/vitest.package.ts",
-    "perf": "node scripts/perf.mjs"
+    "perf": "node scripts/perf.mjs",
+    "decisions": "node scripts/decisions.mjs"
   },
   "dependencies": {
     "@blackjack/cards": "workspace:*",
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@playwright/test": "catalog:",
     "@types/node": "^20",
+    "happy-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

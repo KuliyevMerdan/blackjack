@@ -13,5 +13,5 @@ export {
   type Picture,
   type Result,
 } from './picture.js';
-export { NORMAL, TURBO, INSTANT, scaled, type Pace } from './pace.js';
+export { NORMAL, INSTANT, REDUCED, scaled, type Pace } from './pace.js';
 export { direct, type Cue, type Script } from './script.js';

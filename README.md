@@ -4,13 +4,15 @@ A **single-player blackjack table** — stake, deal, insurance under an ace, the
 and split to four hands until the dealer plays. Node + TypeScript on the server, PixiJS + GSAP in the
 browser, one HTTP request per decision.
 
-> ⚠️ **Status (2026-10-02): a round plays on screen; decisions beyond hit and stand get their
-> choreography next.** **S0–S4**, **C0** and **C1** have landed — the contracts, the round machine,
-> the server (proven over 1,000 hands with two tabs, lost replies and restarts), basic strategy and
-> a simulator ([`docs/sim/`](docs/sim/README.md)), the client core, and the table on screen: Pixi +
-> GSAP on one clock, a decision gate, a HUD that waits for the winning card, and a skip that always
-> lands on the truth. `pnpm dev` to play it locally. See [`ROADMAP.md`](ROADMAP.md) — **C2**,
-> decisions, is next.
+> ⚠️ **Status (2026-10-02): a round plays on screen, every decision with it; history and the
+> verifier come next.** **S0–S4** and **C0–C2** have landed — the contracts, the round machine, the
+> server (proven over 1,000 hands with two tabs, lost replies and restarts), basic strategy and a
+> simulator ([`docs/sim/`](docs/sim/README.md)), the client core, and the table on screen: Pixi +
+> GSAP on one clock, a decision gate, a HUD that waits for the winning card, a skip that always
+> lands on the truth, splits to four hands that fit a phone held upright, a Double's chips sent at
+> the press and sent back on a refusal, keys and screen-reader words for every decision, turbo and
+> reduced motion. `pnpm dev` to play it locally. See [`ROADMAP.md`](ROADMAP.md) — **C3**, history and
+> the in-browser verifier, is next.
 
 ## What makes it interesting to build
 

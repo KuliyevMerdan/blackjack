@@ -1,8 +1,8 @@
 import { Client, type Transport } from '@blackjack/client-core';
-import { NORMAL } from '@blackjack/director';
-import type { Playback, StageCue, StagePicture } from '@blackjack/renderer';
+import type { Playback, Proposal, Proposed, StageCue, StagePicture } from '@blackjack/renderer';
 import { describe, expect, it } from 'vitest';
 import { TableController, type StageLike, type View } from './controller.js';
+import type { Settings } from './settings.js';
 
 /**
  * The decision gate and the beat-gated HUD (ADR-0002), against a stage whose clock the test holds:
@@ -81,15 +81,52 @@ const STAND_EVENTS = [
   { type: 'roundSettled', totalPayout: 1000, serverSeed: '5e'.repeat(32) },
 ];
 
-/** A server of three answers: a session, a deal, and either a stand or a conflict. */
-function server(standAnswer: 'reply' | 'conflict'): Transport {
-  return async ({ path }) => {
+const DOUBLED = {
+  ...base,
+  seq: 1,
+  phase: 'SETTLED',
+  dealer: { cards: ['KS', '7D'], holeHidden: false },
+  hands: [
+    hand(['9H', '9C', '2D'], {
+      stake: 1000,
+      doubled: true,
+      state: 'DONE',
+      outcome: 'WIN',
+      payout: 2000,
+    }),
+  ],
+  activeHand: null,
+  allowed: [],
+  totalStake: 1000,
+  totalPayout: 2000,
+  serverSeed: '5e'.repeat(32),
+};
+const DOUBLE_EVENTS = [
+  { type: 'handDoubled', hand: 0, stake: 500 },
+  { type: 'cardDealt', to: 0, card: '2D' },
+  { type: 'handStood', hand: 0, auto: true },
+  { type: 'activeHandChanged', hand: null },
+  { type: 'holeRevealed', card: '7D' },
+  { type: 'handSettled', hand: 0, outcome: 'WIN', payout: 2000 },
+  { type: 'roundSettled', totalPayout: 2000, serverSeed: '5e'.repeat(32) },
+];
+
+type ActAnswer = 'reply' | 'conflict' | 'refuse' | 'down';
+
+/**
+ * A server of a few answers: a session, a deal of 9-9 against a king, and whatever the test says
+ * to the act. `gate` holds the act's reply until the test lets it through, so the screen can be
+ * read while the request is out. `acts` counts what reached it.
+ */
+function server(answer: ActAnswer, options: { gate?: Promise<void>; balance?: number } = {}) {
+  const seen = { acts: 0, deals: 0 };
+  const transport: Transport = async ({ path, body }) => {
     if (path === '/api/session') {
       return {
         status: 200,
         body: {
           token: 'a1'.repeat(32),
-          balance: 100_000,
+          balance: options.balance ?? 100_000,
           config: CONFIG,
           commit: COMMIT,
           round: null,
@@ -97,26 +134,46 @@ function server(standAnswer: 'reply' | 'conflict'): Transport {
       };
     }
     if (path === '/api/deal') {
+      seen.deals += 1;
       return {
         status: 200,
         body: { round: DEALT, events: DEAL_EVENTS, balance: 99_500, commit: COMMIT },
       };
     }
-    return standAnswer === 'reply'
+    seen.acts += 1;
+    await options.gate;
+    const action = typeof body === 'object' && body !== null && 'action' in body ? body.action : '';
+    if (answer === 'down') return { status: 503, body: 'proxy says no' };
+    if (answer === 'refuse') {
+      return {
+        status: 422,
+        body: {
+          error: { class: 'PLAYER', code: 'INSUFFICIENT_FUNDS', message: 'Not enough to double.' },
+        },
+      };
+    }
+    if (answer === 'conflict') {
+      return {
+        status: 409,
+        body: {
+          error: { class: 'CONFLICT', code: 'STALE_SEQ', message: 'moved' },
+          round: SETTLED,
+          balance: 100_500,
+          commit: NEXT,
+        },
+      };
+    }
+    return action === 'double'
       ? {
           status: 200,
-          body: { round: SETTLED, events: STAND_EVENTS, balance: 100_500, commit: NEXT },
+          body: { round: DOUBLED, events: DOUBLE_EVENTS, balance: 101_000, commit: NEXT },
         }
       : {
-          status: 409,
-          body: {
-            error: { class: 'CONFLICT', code: 'STALE_SEQ', message: 'moved' },
-            round: SETTLED,
-            balance: 100_500,
-            commit: NEXT,
-          },
+          status: 200,
+          body: { round: SETTLED, events: STAND_EVENTS, balance: 100_500, commit: NEXT },
         };
   };
+  return { transport, seen };
 }
 
 /** A stage that starts cues only when told to. */
@@ -126,8 +183,19 @@ class HeldStage implements StageLike {
   private onCue: (cue: StageCue, index: number) => void = () => {};
   private playback: { cue: number; done: boolean; resolve: () => void } | null = null;
 
+  proposals: { move: Proposed; withdrawn: boolean }[] = [];
+  speed = 1;
+
   render(picture: StagePicture): void {
     this.rendered.push(picture);
+  }
+  propose(move: Proposed): Proposal {
+    const entry = { move, withdrawn: false };
+    this.proposals.push(entry);
+    return { withdraw: () => void (entry.withdrawn = true) };
+  }
+  setSpeed(speed: number): void {
+    this.speed = speed;
   }
   play(
     cues: readonly StageCue[],
@@ -169,22 +237,49 @@ class HeldStage implements StageLike {
   }
 }
 
-async function setUp(standAnswer: 'reply' | 'conflict' = 'reply') {
+async function setUp(
+  answer: ActAnswer = 'reply',
+  options: { gate?: Promise<void>; balance?: number; settings?: Settings } = {},
+) {
   const stage = new HeldStage();
   const views: View[] = [];
+  const { transport, seen } = server(answer, options);
   const client = new Client({
-    transport: server(standAnswer),
+    transport,
     sleep: async () => {},
     random: () => 0.5,
     uuid: () => '00000000-0000-4000-8000-000000000001',
     clientSeed: () => 'seed',
+    retry: { attempts: 2 },
     dev: true,
   });
-  const table = new TableController(client, stage, (v) => views.push(v), NORMAL);
+  const table = new TableController(
+    client,
+    stage,
+    (v) => views.push(v),
+    options.settings ? { settings: options.settings } : {},
+    (m) => `€${m / 100}`,
+  );
   await client.open();
   table.refresh();
   const last = () => views.at(-1) ?? table.view();
-  return { stage, table, last };
+  return { stage, table, last, seen, views };
+}
+
+/** Deals and plays the deal to its decision. */
+async function dealt(answer: ActAnswer = 'reply', options: Parameters<typeof setUp>[1] = {}) {
+  const set = await setUp(answer, options);
+  await set.table.deal();
+  set.stage.finish();
+  await tick();
+  return set;
+}
+
+/** A promise the test resolves by hand. */
+function held(): { promise: Promise<void>; release: () => void } {
+  let release: () => void = () => {};
+  const promise = new Promise<void>((r) => (release = r));
+  return { promise, release };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -252,5 +347,246 @@ describe('a conflict', () => {
     expect(stage.rendered.at(-1)?.dealer).toEqual(['KS', '7D']);
     expect(last().message).toMatch(/moved on/);
     expect(last().hud).toBe(100_500);
+  });
+});
+
+describe('double and split: optimistic in chips only (ADR-0002)', () => {
+  it('the chips leave at the press; nothing else moves until the reply', async () => {
+    const gate = held();
+    const { stage, table, last } = await dealt('reply', { gate: gate.promise });
+    const rendered = stage.rendered.length;
+    const cues = stage.cues;
+    const pressed = table.act('double');
+    expect(stage.proposals).toEqual([
+      { move: { kind: 'double', hand: 0, stake: 500, ms: 260 }, withdrawn: false },
+    ]);
+    expect(stage.cues).toBe(cues); // no card scripted before the reply
+    expect(stage.rendered).toHaveLength(rendered);
+    expect(last().hud).toBe(99_500); // and no money moved
+    expect(last().actions).toEqual([]); // every button greys while the request is out
+    gate.release();
+    await pressed;
+    expect(stage.cues[0]?.beat).toEqual({ kind: 'double', hand: 0, stake: 500 });
+    expect(stage.proposals[0]?.withdrawn).toBe(false); // the reply's double beat takes them in
+  });
+
+  it('a refusal sends the chips back and says why', async () => {
+    const { stage, table, last } = await dealt('refuse');
+    await table.act('double');
+    expect(stage.proposals[0]?.withdrawn).toBe(true);
+    expect(last().message).toBe('Not enough to double.');
+    expect(last().round?.seq).toBe(0);
+    expect(last().actions).toContain('double');
+  });
+
+  it('silence sends them back too: the move’s fate is the server’s, and it has not said', async () => {
+    const { stage, table, last } = await dealt('down');
+    await table.act('split');
+    expect(stage.proposals[0]?.move.kind).toBe('split');
+    expect(stage.proposals[0]?.withdrawn).toBe(true);
+    expect(last().message).toMatch(/not answering/);
+  });
+
+  it('a conflict draws the truth as it stands, without the guessed chips', async () => {
+    const { stage, table } = await dealt('conflict');
+    await table.act('double');
+    expect(stage.proposals[0]?.withdrawn).toBe(true);
+    expect(stage.rendered.at(-1)?.hands[0]?.doubled).toBe(false);
+  });
+
+  it('hit and stand propose nothing', async () => {
+    const { stage, table } = await dealt();
+    await table.act('stand');
+    expect(stage.proposals).toEqual([]);
+  });
+});
+
+describe('a double tap', () => {
+  it('is one request, one proposal — whatever the second press was', async () => {
+    const gate = held();
+    const { stage, table, seen } = await dealt('reply', { gate: gate.promise });
+    const first = table.act('double');
+    const second = table.act('double');
+    const third = table.act('stand');
+    gate.release();
+    await Promise.all([first, second, third]);
+    expect(seen.acts).toBe(1);
+    expect(stage.proposals).toHaveLength(1);
+  });
+
+  it('on Deal is one deal', async () => {
+    const { table, seen } = await setUp();
+    await Promise.all([table.deal(), table.deal()]);
+    expect(seen.deals).toBe(1);
+  });
+});
+
+describe('words', () => {
+  it('the peek is said plainly when the dealer does not have it', async () => {
+    const { stage, table, last } = await setUp();
+    await table.deal();
+    const peek = stage.cues.findIndex((c) => c.beat.kind === 'peek');
+    stage.advance(peek);
+    expect(last().callout).toBeNull();
+    stage.advance(1);
+    expect(last().callout).toBe('Dealer checked — no blackjack.');
+    stage.finish();
+    await tick();
+    expect(last().prompt).toBe(
+      'You have 9, 9 — 18. Dealer shows a king. Hit, stand, double or split?',
+    );
+  });
+
+  it('the result arrives with the last result’s beat, and is gone at the next Deal', async () => {
+    const gate = held();
+    const { stage, table, last } = await dealt('reply', { gate: gate.promise });
+    gate.release();
+    await table.act('stand');
+    expect(last().summary).toBeNull(); // the hole card has not turned yet
+    stage.finish();
+    await tick();
+    expect(last().summary).toEqual({
+      heading: 'You win',
+      totals: 'Staked €5 · returned €10',
+      detail: 'Dealer: 17. Your hand: 18, win, €10 back.',
+    });
+    const next = table.deal();
+    expect(last().summary).toBeNull();
+    await next;
+  });
+});
+
+describe('the bet panel', () => {
+  it('lights a chip only while it keeps the stake within the maximum and the balance', async () => {
+    const { table, last } = await setUp('reply', { balance: 3000 });
+    expect(last().chips.map((c) => c.value)).toEqual([100, 500, 2500, 10_000]);
+    expect(last().chips.map((c) => c.enabled)).toEqual([true, true, true, false]);
+    table.addChip(2500); // 500 + 2,500 = 3,000: the whole balance
+    expect(last().stake).toBe(3000);
+    expect(last().chips.every((c) => !c.enabled)).toBe(true);
+    table.addChip(100);
+    expect(last().stake).toBe(3000);
+    table.clearStake();
+    expect(last().stake).toBe(0);
+    expect(last().canDeal).toBe(false);
+    table.addChip(100);
+    expect(last().canDeal).toBe(true);
+  });
+
+  it('brings a remembered stake within the balance', async () => {
+    const { last } = await setUp('reply', { balance: 300 });
+    expect(last().stake).toBe(300);
+    expect(last().canDeal).toBe(true);
+  });
+
+  it('does not move while a hand is open', async () => {
+    const { table, last } = await dealt();
+    table.addChip(100);
+    table.clearStake();
+    expect(last().stake).toBe(500);
+    expect(last().chips.every((c) => !c.enabled)).toBe(true);
+  });
+});
+
+describe('settings', () => {
+  it('turbo is the stage’s speed, set at once; reduced motion is the next script’s pace', async () => {
+    const { stage, table } = await setUp('reply', {
+      settings: { turbo: true, reducedMotion: false },
+    });
+    expect(stage.speed).toBe(2.5);
+    table.configure({ turbo: false, reducedMotion: true });
+    expect(stage.speed).toBe(1);
+    await table.deal();
+    expect(stage.cues.every((c) => c.ms === 0)).toBe(true);
+    expect(stage.cues.some((c) => (c.hold ?? 0) > 0)).toBe(true);
+  });
+});
+
+describe('insurance under an ace', () => {
+  const OFFERED = {
+    ...base,
+    seq: 0,
+    phase: 'INSURANCE',
+    dealer: { cards: ['AS'], holeHidden: true },
+    hands: [hand(['9H', '7C'])],
+    activeHand: null,
+    allowed: ['insurance', 'noInsurance'],
+    totalStake: 500,
+  };
+  const INSURED = {
+    ...OFFERED,
+    seq: 1,
+    phase: 'PLAYER',
+    activeHand: 0,
+    allowed: ['hit', 'stand', 'double'],
+    insurance: { stake: 250, payout: 0 },
+    totalStake: 750,
+  };
+  const transport: Transport = async ({ path }) => {
+    if (path === '/api/session') {
+      return {
+        status: 200,
+        body: {
+          token: 'a1'.repeat(32),
+          balance: 100_000,
+          config: CONFIG,
+          commit: COMMIT,
+          round: null,
+        },
+      };
+    }
+    if (path === '/api/deal') {
+      const events = [
+        { type: 'roundStarted', stake: 500 },
+        { type: 'cardDealt', to: 0, card: '9H' },
+        { type: 'cardDealt', to: 'dealer', card: 'AS' },
+        { type: 'cardDealt', to: 0, card: '7C' },
+        { type: 'holeDealt' },
+        { type: 'insuranceOffered' },
+      ];
+      return { status: 200, body: { round: OFFERED, events, balance: 99_500, commit: COMMIT } };
+    }
+    const events = [
+      { type: 'insuranceDecided', stake: 250 },
+      { type: 'dealerPeeked', blackjack: false },
+      { type: 'insuranceSettled', payout: 0 },
+      { type: 'activeHandChanged', hand: 0 },
+    ];
+    return { status: 200, body: { round: INSURED, events, balance: 99_250, commit: COMMIT } };
+  };
+
+  it('offers the pair, then says the peek and what insurance came to — both', async () => {
+    const stage = new HeldStage();
+    const views: View[] = [];
+    const client = new Client({
+      transport,
+      sleep: async () => {},
+      random: () => 0.5,
+      uuid: () => '00000000-0000-4000-8000-000000000002',
+      clientSeed: () => 'seed',
+      dev: true,
+    });
+    const table = new TableController(
+      client,
+      stage,
+      (v) => views.push(v),
+      {},
+      (m) => `€${m / 100}`,
+    );
+    await client.open();
+    await table.deal();
+    stage.finish();
+    await tick();
+    const last = () => views.at(-1) ?? table.view();
+    expect(last().actions).toEqual(['insurance', 'noInsurance']);
+    expect(last().callout).toBe('The dealer shows an ace. Insurance?');
+    expect(last().prompt).toBe('Dealer shows an ace. Take insurance or no insurance?');
+    await table.act('insurance');
+    expect(last().callout).toBeNull(); // the press cleared the offer; the reply has not played yet
+    stage.finish();
+    await tick();
+    expect(last().callout).toBe('Dealer checked — no blackjack. Insurance lost.');
+    expect(last().actions).toEqual(['hit', 'stand', 'double']);
+    expect(stage.proposals).toEqual([]); // insurance is not one of the optimistic moves
   });
 });

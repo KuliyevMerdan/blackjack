@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { playRound, stacked } from './__fixtures__/rounds.js';
-import { INSTANT, NORMAL, TURBO } from './pace.js';
+import { INSTANT, NORMAL, REDUCED, scaled } from './pace.js';
 import { applyBeat, pictureOf, type Beat } from './picture.js';
 import { direct } from './script.js';
 
@@ -63,7 +63,7 @@ describe('the deal', () => {
     const script = direct(last.previous, last.events, last.next, last.balance, NORMAL);
     for (const [i, cue] of script.cues.entries()) {
       const prev = script.cues[i - 1];
-      const end = prev === undefined ? 0 : prev.at + prev.ms;
+      const end = prev === undefined ? 0 : prev.at + prev.ms + prev.hold;
       const draw = cue.beat.kind === 'card' && cue.beat.to === 'dealer';
       expect(cue.at).toBe(draw ? end + NORMAL.dealerPause : end);
     }
@@ -96,9 +96,28 @@ describe('pace', () => {
     const [deal] = playRound(3);
     if (deal === undefined) throw new Error('no deal');
     const normal = direct(null, deal.events, deal.next, deal.balance, NORMAL).duration;
-    const turbo = direct(null, deal.events, deal.next, deal.balance, TURBO).duration;
+    const turbo = direct(null, deal.events, deal.next, deal.balance, scaled(NORMAL, 0.4)).duration;
     expect(turbo).toBeLessThan(normal * 0.45);
     expect(direct(null, deal.events, deal.next, deal.balance, INSTANT).duration).toBe(0);
+  });
+
+  it('reduced motion moves nothing, and still deals one card at a time, in order', () => {
+    let checked = 0;
+    for (let i = 0; i < 200; i += 1) {
+      for (const step of playRound(i)) {
+        const reduced = direct(step.previous, step.events, step.next, step.balance, REDUCED);
+        const normal = direct(step.previous, step.events, step.next, step.balance, NORMAL);
+        expect(reduced.cues.every((c) => c.ms === 0)).toBe(true);
+        expect(reduced.cues.map((c) => c.beat)).toEqual(normal.cues.map((c) => c.beat));
+        expect(reduced.to).toEqual(normal.to);
+        const cards = reduced.cues.filter((c) => c.beat.kind === 'card').map((c) => c.at);
+        for (let k = 1; k < cards.length; k += 1) {
+          expect((cards[k] ?? 0) - (cards[k - 1] ?? 0)).toBeGreaterThanOrEqual(REDUCED.gap);
+        }
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
   });
 
   /**

@@ -178,6 +178,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.14.5
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

@@ -32,7 +32,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ✅ (landed 2026-10-02) |
 | **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ✅ (landed 2026-10-02) |
 | **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ✅ (landed 2026-10-02) |
-| **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ☐ |
+| **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ✅ (landed 2026-10-02) |
 | **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ☐ |
 | **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ☐ |
 | **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ☐ |
@@ -319,22 +319,73 @@ CPU profile put ~67 s in native GL and 0.1 s in the hottest JS function. A real 
 
 _3 days._
 
-- [ ] The action bar: Hit, Stand, Double, Split, and Insurance / No insurance — exactly `allowed`,
+- [x] The action bar: Hit, Stand, Double, Split, and Insurance / No insurance — exactly `allowed`,
       disabled until the gate opens, keyboard (`H S D P I N`) and screen-reader labels; the bet panel
-      with chips against `betUnit`, `minBet`, `maxBet` and the balance.
-- [ ] Split: the hand divides on screen, the active hand is unmistakable, up to four hands — and the
-      portrait layout for four hands of six cards ([`CLAUDE.md`](CLAUDE.md) § Gaps).
-- [ ] Double and split are **optimistic in chips only**: the chips move at the press, the cards wait
-      for the server, and a refusal sends the chips back with the reason in words.
-- [ ] Insurance under an ace, and the peek's result said plainly when the dealer does not have it.
-- [ ] Turbo (a `timeScale`) and reduced motion (a pace with no travel), both from settings, both
-      remembered.
-- [ ] The result moment: every hand's outcome and payout, the round's total, gone before the next
-      deal.
+      with chips against `betUnit`, `minBet`, `maxBet` and the balance. Each button carries its key
+      (`aria-keyshortcuts`, printed beside the label); a live region says the decision in words —
+      "Hand 2 of 3: 8, 3 — 11. Dealer shows a 6. Hit, stand or double?" — and the result in full.
+      Chips are 1, 5, 25 and 100 units up to `maxBet`; a chip lights only if it keeps the stake within
+      the maximum and the balance, Deal only for a stake the server takes (`apps/web/src/table/bet.ts`,
+      every reachable stake checked under eight balances). Enter deals and Space skips from the page;
+      on a focused button they are the button's own.
+- [x] Split: the hand divides on screen, the active hand is unmistakable, up to four hands — and the
+      portrait layout for four hands of six cards. The pair's second card slides to the new hand and
+      its stake follows; the active hand is ringed and lit, every other hand dimmed. **Decided:** more
+      than two hands on a phone held upright go in **two rows** — four hands of six cards side by
+      side would leave cards ≈35 px wide at 375 px; two rows keep them 64 px at 375 × 812 (60 at the
+      defaults the tests use). A hand's place depends only on the number of hands, never on its cards
+      — so a split's stake can be sent to where its hand will be before the reply — and a seventh
+      card closes a hand's fan up rather than growing it. The felt is the band between the HUD and
+      the controls, **measured** from the DOM (`Insets`), and the controls keep one height between
+      the bet panel and the action bar so the band does not move mid-round. Held by
+      `stage.test.ts` over nine viewports, one to four hands of two, six and nine cards, a dealer row
+      of seven: every hand on the felt, none overlapping another, the dealer row or the shoe.
+- [x] Double and split are **optimistic in chips only**: the chips move at the press, the cards wait
+      for the server, and a refusal sends the chips back with the reason in words. `Stage.propose()`
+      is the one optimistic API — there is none that could move a card — and the reply's `double` or
+      `split` cue takes the chips in (a split's become the new hand's stack). A refusal, a failure
+      (the move's fate unknown) and a conflict (a snap to the truth) all send them back; the HUD
+      never moves at the press. Insurance is not optimistic: it is not a move on a hand.
+- [x] Insurance under an ace, and the peek's result said plainly when the dealer does not have it.
+      The dealer's hole card lifts at the peek; the line over the bar says "Dealer checked — no
+      blackjack." or "Dealer has blackjack.", and what insurance came to — **a reply's lines add up**,
+      so the peek is never overwritten by the insurance that settled after it. Insurance shows under
+      the dealer's total on the felt.
+- [x] Turbo (a `timeScale`) and reduced motion (a pace with no travel), both from settings, both
+      remembered. Turbo is `Stage.setSpeed(2.5)` on the timeline and every tween — set mid-round, it
+      speeds up the round already playing; reduced motion is `REDUCED`, every motion zero and every
+      hold kept, so cards appear one at a time where they land. **Diverged:** a cue now separates its
+      motion (`ms`) from the stillness after it (`hold`) — a card's gap and a result's moment are
+      holds — which is what lets a pace drop the travel and keep the rhythm. `TURBO` the pace is gone.
+      The settings live under a ⚙ in the HUD, in `localStorage`, defaulting to the system's
+      `prefers-reduced-motion`; `?turbo` and `?reduced` override one visit.
+- [x] The result moment: every hand's outcome and payout, the round's total, gone before the next
+      deal. Each hand's total and result beside its stake, a lost stake greyed; over the controls
+      "You win · Staked €25.00 · returned €50.00" — both figures the snapshot's, no subtraction — and
+      the whole round said hand by hand to the live region. It appears when the last result has
+      played and goes at the press of Deal, not when the next round's cards land.
 
 **Done when:** thirty hands on a 300 ms throttled link — with a split, a double and an insurance
 offer among them — never show a card before its reply, never light a button the server refuses, and
-never let a double tap become two actions.
+never let a double tap become two actions. **Met 2026-10-02** (`pnpm --filter @blackjack/web
+decisions`, Chromium as a 375 × 812 phone, the browser's own throttling at 300 ms latency — round
+trips 310–330 ms): 30 hands, four of them forced through the dev shoe (a pair of eights split and
+split again, an eleven doubled, insurance taken and lost, insurance declined against a dealer
+blackjack), the rest real shuffles played by basic strategy. ≈13,600 animation frames, each checked
+in the page: no card on the felt that the truth did not hold, no lit action outside `allowed` or
+while a request was out or the script still playing, Deal lit only between rounds — **zero
+violations**. 57 decisions, each pressed twice (a double click, or its key struck twice): **57
+actions and 30 deals reached the server, every answer 200** — no refusal, no conflict. 30 result
+moments, each gone at the Deal press; the peek said plainly, "Dealer checked — no blackjack.
+Insurance lost." among the lines over the bar. Six full runs of seven met it.
+
+**The probe was tested before it was trusted.** Against a mutant that opens the gate at once it
+failed on the first hand — after one fix: its first version asked the controller whether its own
+gate was open, and passed the mutant; it now asks the stage. The seventh reported 29 result
+moments for 30 hands and was not reproduced in five more: the likeliest cause is the probe's own —
+it stopped a hand after twelve decisions, and read the line before that last reply had played; a
+hand split to four can take twelve. It now plays each hand until the next Deal is offered, and
+reports which hand lacked a result if one ever does.
 
 ## Block C3 — History, verification, hint
 

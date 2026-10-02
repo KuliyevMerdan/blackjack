@@ -7,7 +7,10 @@ export interface Cue {
   readonly beat: Beat;
   /** Milliseconds from the start of the script. */
   readonly at: number;
+  /** How long the beat's motion lasts — what the stage animates over. */
   readonly ms: number;
+  /** Stillness after the motion, before the next cue may start (a card's `gap`). */
+  readonly hold: number;
   readonly after: Picture;
   /** The truth's balance less every payout whose beat has not played yet (ADR-0002). */
   readonly hud: number;
@@ -51,10 +54,11 @@ export function direct(
   for (const beat of beats) {
     clock += waitBefore(beat, last, pace);
     const ms = durationOf(beat, pace);
+    const hold = holdAfter(beat, pace);
     picture = applyBeat(picture, beat);
     hud += payoutOf(beat);
-    cues.push({ beat, at: clock, ms, after: picture, hud });
-    clock += ms;
+    cues.push({ beat, at: clock, ms, hold, after: picture, hud });
+    clock += ms + hold;
     last = beat;
   }
   return { from, to: picture, cues, duration: clock, hudBefore: balance - unpaid };
@@ -108,7 +112,7 @@ function durationOf(beat: Beat, pace: Pace): number {
     case 'clear':
       return pace.clear;
     case 'card':
-      return pace.travel + pace.gap;
+      return pace.travel;
     case 'flip':
       return pace.flip;
     case 'peek':
@@ -125,8 +129,7 @@ function durationOf(beat: Beat, pace: Pace): number {
       return pace.bust;
     case 'active':
       return pace.active;
-    case 'settle':
-      return pace.settle;
+    case 'settle': // a result is read, not watched: nothing moves, the table holds still for it
     case 'offer':
     case 'decision':
       return 0;
@@ -135,6 +138,13 @@ function durationOf(beat: Beat, pace: Pace): number {
       throw new RangeError(`unknown beat ${JSON.stringify(unhandled)}`);
     }
   }
+}
+
+/** Stillness after a beat's motion: a card lands and the table breathes; a result is read. */
+function holdAfter(beat: Beat, pace: Pace): number {
+  if (beat.kind === 'card') return pace.gap;
+  if (beat.kind === 'settle') return pace.settle;
+  return 0;
 }
 
 /** The dealer's own draws wait a beat each — after the turn, and after each other. */

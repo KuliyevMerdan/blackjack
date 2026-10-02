@@ -31,7 +31,10 @@ export interface StageBeat {
 export interface StageCue {
   readonly beat: StageBeat;
   readonly at: number;
+  /** How long the cue's motion lasts. */
   readonly ms: number;
+  /** Stillness after it — counted into the script's length, never animated. */
+  readonly hold?: number;
   readonly after: StagePicture;
 }
 

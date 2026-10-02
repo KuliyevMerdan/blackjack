@@ -5,25 +5,31 @@ repository.
 
 ## Project status
 
-> ⚠️ **The table serves and is measured; nothing draws it yet.** **S0 landed 2026-10-02**: the pnpm + Turborepo
-> workspace, strict TypeScript, the dependency graph and the purity rules enforced and *proven to
-> fire* against deliberately illegal fixtures, and CI running `pnpm check`. **S1 landed
-> 2026-10-02**: the four packages everything reads — `money` (exact or nothing), `cards` (the value
-> of a hand), `fair` (SHA-256, HMAC and an unbiased shuffle, pinned by an independent Python
-> implementation in Node and in a DOM), and `protocol` (every request, reply, event and error as a
-> zod schema, with the face-down invariant checked at the boundary). **S2 landed 2026-10-02**: the
-> round machine — deal, insurance, peek, four-hand splits, the dealer, settlement — pure, with
-> `allowed` matched against an independent oracle and 100,000 random hands folding to their
-> snapshots with money conserved at every step. **S3 landed 2026-10-02**: the server — sessions,
-> wallets, seeds, idempotency and versions, SQLite, `/fair` — proven over 1,000 hands with two tabs,
-> lost replies and restarts. **S4 landed 2026-10-02**: basic strategy as a table, every pair cell
-> measured against the engine, and 3·10⁷ simulated rounds against the published edge
-> ([`docs/sim/`](docs/sim/README.md)). **C0 landed 2026-10-02**: `client-core` — the truth store,
-> one request in flight, retries under one `actionId`, conflicts taken as truth — converging every
-> hand of 1,000 through a network that drops, duplicates and restarts. **C1 landed 2026-10-02**:
-> the table on screen — `director` scripting every reply, `renderer` playing it with GSAP on Pixi's
-> clock, the decision gate and the beat-gated HUD; every skip lands on the picture a full watch
-> does. One unit (`tools/load`) is still an empty shell. **C2 — decisions — is next.**
+> ⚠️ **A round plays on screen, every decision with it; history and the verifier are next.**
+> **S0 landed 2026-10-02**: the pnpm + Turborepo workspace, strict TypeScript, the dependency graph
+> and the purity rules enforced and *proven to fire* against deliberately illegal fixtures, and CI
+> running `pnpm check`. **S1 landed 2026-10-02**: the four packages everything reads — `money`
+> (exact or nothing), `cards` (the value of a hand), `fair` (SHA-256, HMAC and an unbiased shuffle,
+> pinned by an independent Python implementation in Node and in a DOM), and `protocol` (every
+> request, reply, event and error as a zod schema, with the face-down invariant checked at the
+> boundary). **S2 landed 2026-10-02**: the round machine — deal, insurance, peek, four-hand splits,
+> the dealer, settlement — pure, with `allowed` matched against an independent oracle and 100,000
+> random hands folding to their snapshots with money conserved at every step. **S3 landed
+> 2026-10-02**: the server — sessions, wallets, seeds, idempotency and versions, SQLite, `/fair` —
+> proven over 1,000 hands with two tabs, lost replies and restarts. **S4 landed 2026-10-02**: basic
+> strategy as a table, every pair cell measured against the engine, and 3·10⁷ simulated rounds
+> against the published edge ([`docs/sim/`](docs/sim/README.md)). **C0 landed 2026-10-02**:
+> `client-core` — the truth store, one request in flight, retries under one `actionId`, conflicts
+> taken as truth — converging every hand of 1,000 through a network that drops, duplicates and
+> restarts. **C1 landed 2026-10-02**: the table on screen — `director` scripting every reply,
+> `renderer` playing it with GSAP on Pixi's clock, the decision gate and the beat-gated HUD; every
+> skip lands on the picture a full watch does. **C2 landed 2026-10-02**: decisions — an action bar
+> of exactly `allowed`, with keys and words for a screen reader; chips against the table's limits;
+> splits to four hands in two rows on a phone held upright; a Double's or a Split's chips sent at
+> the press and sent back on a refusal; the peek said plainly; turbo and reduced motion, remembered
+> — and thirty hands on a 300 ms link without a card ahead of its reply, a lit button the truth
+> refuses, or a double tap sent twice. One unit (`tools/load`) is still an empty shell. **C3 —
+> history, verification, the hint — is next.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -98,10 +104,10 @@ right-hand column is the block that fills each.
 | `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }` with refusals as values; `view(state)` the only door to the wire (the hole card and server seed stay behind it); `replay(…)` for the verifier and the server's resume. Pure | ✅ S2 |
 | `packages/strategy` | basic strategy for the published rules, as a table (`ROWS`: hard, soft, pairs × ten up cards), and `recommend(hand, upcard, allowed)` — always one of `allowed`, falling back as a player would (double → hit, or stand on a soft 18; a split refused at four hands → the pair's total). Insurance never. Pure | ✅ S4 |
 | `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM**: `fetch`, timers, randomness and storage are handed in, so the browser, the load tool and the tests run the same code. `subscribe` gives every replacement of the truth as `(previous, events, next)`; dev mode asserts `fold(previous, events) == next` on every reply | ✅ C0 |
-| `packages/director` | `direct(previous, events, next, balance, pace) → Script` — the choreography as data: beats with `at` and `ms`, each with the `Picture` after it and the HUD's balance by then. `pictureOf(round)` is the snap's picture; `NORMAL` / `TURBO` / `INSTANT` paces. Pure, **no Pixi, no GSAP** | ✅ C1 |
-| `packages/renderer` | the table: Pixi v8 scene, a card atlas drawn at boot (`Graphics` + `Text`, one texture, ≈100 ms at 3× DPR), GSAP on the Pixi ticker (`driveGsapFromTicker`). `Stage.render(picture)` is the snap path, `Stage.play(cues)` the animated one, `skip()` completes it. Declares its own `StagePicture` / `StageCue`; the director's types fit them, held together by the compiler in `apps/web`. **No protocol** | ✅ C1 |
+| `packages/director` | `direct(previous, events, next, balance, pace) → Script` — the choreography as data: cues with `at`, a motion (`ms`) and the stillness after it (`hold`), each with the `Picture` after it and the HUD's balance by then. `pictureOf(round)` is the snap's picture; `NORMAL`, `REDUCED` (no motion, every hold kept) and `INSTANT` paces. Pure, **no Pixi, no GSAP** | ✅ C1 · C2 |
+| `packages/renderer` | the table: Pixi v8 scene, a card atlas drawn at boot (`Graphics` + `Text`, one texture, ≈100 ms at 3× DPR), GSAP on the Pixi ticker (`driveGsapFromTicker`). `Stage.render(picture)` is the snap path, `Stage.play(cues)` the animated one, `skip()` completes it; `propose()` is the one optimistic path — a Double's or Split's chips, withdrawable — and `setSpeed()` is turbo. Stakes as chip stacks, the active hand ringed and the rest dimmed, the peek's lift. `layout(width, height, shape, insets)` puts more than two hands in two rows on an upright phone. Declares its own `StagePicture` / `StageCue`; the director's types fit them, held together by the compiler in `apps/web`. **No protocol** | ✅ C1 · C2 |
 | `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production | ✅ S3 |
-| `apps/web` | Vite — the Pixi canvas, a DOM HUD, bet panel and action bar over it; `TableController` turns truth changes into scripts and computes the decision gate and the HUD from the playback's position. `scripts/perf.mjs` measures C1's done-when. The verification page comes in C3 | ◐ C1 (C2, C3 to come) |
+| `apps/web` | Vite — the Pixi canvas, a DOM HUD, bet panel (chips against the limits, `bet.ts`), action bar (keys in `keys.ts`) and settings over it; `TableController` turns truth changes into scripts, computes the decision gate and the HUD from the playback's position, sends a Double's or Split's chips at the press and withdraws them on anything but a reply, and words the table (`words.ts`) for the line over the bar and a live region. `scripts/perf.mjs` measures C1's done-when, `scripts/decisions.mjs` C2's. The verification page comes in C3 | ◐ C1 · C2 (C3 to come) |
 | `tools/sim` | basic strategy through the engine on worker threads, each round a fresh protocol shuffle: realised edge ± σ against the published figure, outcomes, how often each rule fires (`pnpm sim`); every pair cell's actions on common shoes (`pnpm sim -- --chart`). Exits 1 when a result does not hold | ✅ S4 |
 | `tools/load` | many sessions playing basic strategy against a running server, money audited | P0 |
 
@@ -218,7 +224,11 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
   dealer draws, the order hands settle in), where the beat-gated balance is computed, and where every
   script is proved to end in a picture of the new snapshot.
 - `renderer` is the stage. Every beat has an animated path and a snap-to-end path; skip, a hidden
-  tab, a reconnect and a reload all take the snap.
+  tab, a reconnect, a reload and a resize all take the snap.
+- **One thing is optimistic**: a Double's or a Split's chips leave at the press (`Stage.propose`),
+  because that is the player's own move and its latency is felt. The reply's cue takes them in;
+  a refusal, a failure or a conflict sends them back, the reason in words. Cards and the balance
+  never move before the reply — the renderer has no way to deal a card the director did not script.
 
 ### Testing layers
 
@@ -229,7 +239,7 @@ HTTP reply ──▶ client-core (truth: snapshot, balance, commit)
 | Uniformity | χ² over 240,000 shuffles of four items (all 24 orders) and over 20,000 full shoes (one tagged card's position) — the rejection step proven by test, not assumed | ✅ S1 |
 | Engine | every transition and refusal on stacked shoes · `allowed` against an oracle written from §4.2 at every decision of 10,000 hands under random rule sets, and `act` accepting exactly it · 100,000 seeded hands of random legal play: every snapshot and event parsed, events folding to the snapshot, money conserved at every step · 10,000 hands replayed from their decisions alone | ✅ S2 |
 | Statistical | `tools/sim`: three runs of 10⁷ rounds, each within 3σ of the published 0.40622 % (pooled 0.448 % ± 0.021 %) · 110 pair cells, the chart's action best within 3σ in each · a 2,000-round run pinned to the unit for a fixed seed | ✅ S4 |
-| Choreography | `director`: every script of 5,000 random rounds ends in its snapshot's picture, the HUD climbing only on payouts · `renderer`: watching 150 rounds to the end and snapping draw the same table; skipping from every cue — and from halfway through it — of 60 rounds lands there too; 500 rounds leave one sprite per card and no tweens; a split moves the pair's card, never deals one · `apps/web`: the gate shut until the decision beat, the HUD gated by the settle beat · in Chromium (`perf.mjs`): 50 random skips equal to a fresh render | ✅ C1 |
+| Choreography | `director`: every script of 5,000 random rounds ends in its snapshot's picture, the HUD climbing only on payouts; reduced motion moves nothing and keeps every beat in order · `renderer`: watching 150 rounds to the end and snapping draw the same table — chips included; skipping from every cue — and from halfway through it — of 60 rounds lands there too, and so does a resize; 500 rounds leave one sprite per card, one stack per hand and no tweens; a split moves the pair's card, never deals one; a split's proposed chips become the new hand's stack, a withdrawn proposal leaves the table as it was; turbo ends a script in a fraction of its time; the layout over nine viewports and up to four hands of nine cards · `apps/web`: the gate shut until the decision beat, the HUD gated by the settle beat; a double tap one request; chips out at the press and back on a refusal, a failure and a conflict; the peek and insurance said together; the action bar exactly `allowed` in a DOM (happy-dom) · in Chromium (`perf.mjs`): 50 random skips equal to a fresh render · (`decisions.mjs`): 30 hands at 300 ms — no card ahead of its reply, no lit button the truth refuses, every decision pressed twice and sent once | ✅ C1 · C2 |
 | Integration | 1,000 hands over real HTTP on SQLite: two tabs on one session, 15 % of replies lost and retried (byte-identical), two restarts mid-hand — the wallet equal to the sum of its rounds, every round verified from its seeds, every card dealt once · 10,000 hands scanned: no reply or log line carries a hole card or an unrevealed seed | ✅ S3 · P0 adds faults on the wire |
 | E2E | Playwright: a forced split into four hands with a double and a dealer bust, played through the real UI, then verified in the browser | P1 |
 
@@ -266,6 +276,8 @@ The server on its own: `pnpm --filter @blackjack/server dev` (tsx watch; `BJ_DEV
 `pnpm dev` runs the server (`BJ_DEV=on`) and Vite together; the page proxies `/api` and `/fair` to
 :8080. `pnpm --filter @blackjack/web perf` measures C1's done-when in Chromium — see
 [`ROADMAP.md`](ROADMAP.md) § C1 for the numbers and what headless Chromium can and cannot say.
+`pnpm --filter @blackjack/web decisions` measures C2's (≈3 min; `BJ_HANDS=6` for a quick look). Both
+build the page in `--mode perf` and start their own server (`scripts/harness.mjs`).
 
 A pre-commit hook (husky → lint-staged) runs ESLint and Prettier over staged files. `turbo.json`
 sets `agentGuidance: false`: Turborepo ≥ 2.11 otherwise writes an `AGENTS.md` whenever it detects an
@@ -286,8 +298,14 @@ writing:
   WebGL falls back to SwiftShader, rAF runs at 30 Hz idle or not, and native GL stalls show up as
   50–90 ms long tasks with almost no JS in them; it measures the machine, not the table. A real
   device, through remote debugging, is **P0**'s.
-- **Four split hands in portrait.** Four hands of up to six cards each, a dealer row and a shoe, on a
-  phone held upright. A real layout problem, not a detail — **C2**.
+- **A phone held sideways.** At 812 × 375 the measured band between the HUD and the controls is
+  ≈150 px — a dealer row and a row of hands with room for six cards each leave cards 16 px wide, the
+  layout's floor. Upright is solved (two rows of hands, C2); sideways wants the controls in a column
+  at the side and a left/right inset, or a "turn your phone" notice. **P1**, with the README's
+  screenshots.
+- **A reply that lands in a hidden tab.** The browser stops animation frames in a hidden tab, so the
+  script waits and plays in one jump when the tab comes back — it lands on the truth (the skip
+  path), but the stage could render the snapshot at once instead. **P0**, with the hidden-tab item.
 - **The host.** The sibling projects run on Render's free tier: no disk, asleep after 15 idle
   minutes. Here an open round lives in SQLite; on a diskless host a restart drops open rounds and
   wallets together, which is honest for a demo but must be said. **P1** decides and writes an ADR.

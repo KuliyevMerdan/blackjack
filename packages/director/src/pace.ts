@@ -7,13 +7,13 @@ export interface Pace {
   readonly clear: number;
   /** A card from the shoe to its place. */
   readonly travel: number;
-  /** The breath between two cards dealt in a row. */
+  /** The stillness after a card lands, before the next beat — a hold, not a motion. */
   readonly gap: number;
   /** The hole card turning over. */
   readonly flip: number;
   /** The dealer checking under an ace or a ten. */
   readonly peek: number;
-  /** Before each card the dealer draws for themselves — the moment the table holds its breath. */
+  /** Before each card the dealer draws for themselves — the moment the table holds its breath. A hold. */
   readonly dealerPause: number;
   /** Chips moving: a double, a split's second stake, insurance. */
   readonly chips: number;
@@ -23,7 +23,7 @@ export interface Pace {
   readonly active: number;
   /** A hand going over 21. */
   readonly bust: number;
-  /** Each hand's result, left to right. */
+  /** Each hand's result, left to right — a hold: nothing moves while it is read. */
   readonly settle: number;
 }
 
@@ -41,7 +41,7 @@ export const NORMAL: Pace = {
   settle: 380,
 };
 
-/** Every duration scaled — turbo is `scaled(NORMAL, 0.4)`, reduced motion and E2E `scaled(NORMAL, 0)`. */
+/** Every duration scaled — `scaled(NORMAL, 0)` is the E2E suite's instant pace. */
 export function scaled(pace: Pace, factor: number): Pace {
   const at = (ms: number) => Math.round(ms * factor);
   return {
@@ -59,5 +59,25 @@ export function scaled(pace: Pace, factor: number): Pace {
   };
 }
 
-export const TURBO: Pace = scaled(NORMAL, 0.4);
 export const INSTANT: Pace = scaled(NORMAL, 0);
+
+/**
+ * Reduced motion (ADR-0002): nothing travels, turns or slides — every motion is zero long — but the
+ * holds stay, so the round still happens one card at a time, in order, at a pace a person can read.
+ * A card's travel becomes stillness after it (`gap`); the dealer still pauses before each draw, and
+ * each result still gets its moment. Turbo is not a pace: it is the stage's `timeScale`, and the two
+ * combine.
+ */
+export const REDUCED: Pace = {
+  clear: 0,
+  travel: 0,
+  gap: NORMAL.travel,
+  flip: 0,
+  peek: 0,
+  dealerPause: NORMAL.dealerPause,
+  chips: 0,
+  split: 0,
+  active: 0,
+  bust: 0,
+  settle: NORMAL.settle,
+};

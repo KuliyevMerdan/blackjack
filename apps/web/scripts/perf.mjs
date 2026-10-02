@@ -11,85 +11,10 @@
 //
 // Needs Playwright's Chromium (PLAYWRIGHT_BROWSERS_PATH if it is not in the default place) and a
 // built server (`pnpm build`).
-import { spawn } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { startTable } from './harness.mjs';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '../../..');
-const SERVER = 8093;
-const WEB = 5193;
-
-const children = [];
-const run = (args, env, cwd = root) => {
-  const child = spawn(process.execPath, args, {
-    cwd,
-    env: { ...process.env, ...env },
-    stdio: 'ignore',
-  });
-  children.push(child);
-};
-const stop = () => children.forEach((c) => c.kill('SIGTERM'));
-process.on('exit', stop);
-
-async function until(fn, ms, what) {
-  const end = Date.now() + ms;
-  for (;;) {
-    try {
-      const value = await fn();
-      if (value) return value;
-    } catch {
-      // not up yet — ask again
-    }
-    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
-    await new Promise((r) => setTimeout(r, 50));
-  }
-}
-
-const vite = path.join(root, 'apps/web/node_modules/vite/bin/vite.js');
-await new Promise((resolve, reject) => {
-  const build = spawn(
-    process.execPath,
-    [vite, 'build', '--mode', 'perf', '--outDir', 'dist-perf', '--logLevel', 'warn'],
-    {
-      cwd: path.join(root, 'apps/web'),
-      stdio: 'inherit',
-    },
-  );
-  build.on('exit', (code) =>
-    code === 0 ? resolve() : reject(new Error(`vite build exited ${code}`)),
-  );
-});
-run(['apps/server/dist/main.js'], {
-  PORT: String(SERVER),
-  HOST: '127.0.0.1',
-  LOG_LEVEL: 'warn',
-  BJ_STARTING_BALANCE: '10000000',
-});
-run(
-  [
-    vite,
-    'preview',
-    '--outDir',
-    'dist-perf',
-    '--host',
-    '127.0.0.1',
-    '--port',
-    String(WEB),
-    '--strictPort',
-  ],
-  {
-    BJ_SERVER: `http://127.0.0.1:${SERVER}`,
-  },
-  path.join(root, 'apps/web'),
-);
-await until(
-  () => fetch(`http://127.0.0.1:${SERVER}/ready`).then((r) => r.ok),
-  20_000,
-  'the server',
-);
-await until(() => fetch(`http://127.0.0.1:${WEB}/`).then((r) => r.ok), 20_000, 'the web preview');
+const { url: PAGE, stop } = await startTable({ server: 8093, web: 5193 });
 
 // Knobs for diagnosis: BJ_PERF_GPU=1 asks Chromium for the real GPU instead of SwiftShader;
 // BJ_PERF_DPR and BJ_PERF_THROTTLE change the phone; BJ_PERF_FRAMES_ONLY=1 stops after step 2.
@@ -116,7 +41,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 
 // ── 1. boot ──
 const opened = Date.now();
-await page.goto(`http://127.0.0.1:${WEB}/`);
+await page.goto(PAGE);
 await page.waitForFunction(() => document.querySelector('[data-deal]')?.disabled === false, null, {
   timeout: 30_000,
 });

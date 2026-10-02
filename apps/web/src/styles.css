@@ -41,13 +41,15 @@ body {
   padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
 }
 #ui button,
-#ui output {
+#ui output,
+#ui input,
+#ui label {
   pointer-events: auto;
 }
 .hud {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
 .balance strong {
@@ -77,6 +79,44 @@ body {
 .status[data-state='outdated'] {
   color: #ff9b8f;
 }
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gear {
+  pointer-events: auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 241, 232, 0.35);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 1.1rem;
+}
+.settings {
+  pointer-events: auto;
+  align-self: flex-end;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 0.9rem;
+  max-width: 22rem;
+}
+.settings label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.settings input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--gold);
+}
 .message {
   margin: 8px auto 0;
   max-width: 32rem;
@@ -85,12 +125,40 @@ body {
   padding: 8px 12px;
   border-radius: 8px;
 }
+/*
+ * The controls keep one height whether they hold the bet panel or the action bar: the felt's free
+ * band is measured from their top (main.ts), and a band that changed with the phase would move
+ * every card on the table between the deal and the first decision.
+ */
 .controls {
   margin-top: auto;
+  height: 148px;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
-.bet,
+.line {
+  margin: 0;
+  min-height: 1.3em;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--dim);
+}
+.line[data-kind='result'] {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 1rem;
+}
+.bet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.chips,
+.stake-row,
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -98,10 +166,19 @@ body {
   justify-content: center;
   align-items: center;
 }
+.actions {
+  flex-wrap: nowrap;
+  width: 100%;
+  max-width: 30rem;
+}
+.actions button {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .controls button {
   min-width: 64px;
   min-height: 48px;
-  padding: 0 16px;
+  padding: 0 12px;
   border-radius: 12px;
   border: 1px solid rgba(244, 241, 232, 0.35);
   background: var(--panel);
@@ -115,8 +192,34 @@ body {
   color: #1b1b1f;
   border-color: transparent;
 }
+.controls button.chip {
+  min-width: 48px;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 999px;
+  border: 3px dashed rgba(27, 27, 31, 0.45);
+  background: #f4f1e8;
+  color: #1b1b1f;
+  font-size: 0.8rem;
+}
 .controls button:disabled {
   opacity: 0.45;
+}
+.controls button:focus-visible,
+.gear:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+kbd {
+  font: inherit;
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+@media (max-width: 380px) {
+  kbd {
+    display: none;
+  }
 }
 .controls output {
   min-width: 72px;
@@ -128,8 +231,15 @@ body {
   display: none !important;
 }
 .notice {
-  margin: 8px 0 0;
-  text-align: center;
+  margin: 2px 0 0;
   font-size: 0.7rem;
   color: var(--dim);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
