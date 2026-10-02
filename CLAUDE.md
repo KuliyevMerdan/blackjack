@@ -18,8 +18,10 @@ repository.
 > wallets, seeds, idempotency and versions, SQLite, `/fair` — proven over 1,000 hands with two tabs,
 > lost replies and restarts. **S4 landed 2026-10-02**: basic strategy as a table, every pair cell
 > measured against the engine, and 3·10⁷ simulated rounds against the published edge
-> ([`docs/sim/`](docs/sim/README.md)). Five units are still empty shells, each already policed.
-> **C0 — `client-core` — is next.**
+> ([`docs/sim/`](docs/sim/README.md)). **C0 landed 2026-10-02**: `client-core` — the truth store,
+> one request in flight, retries under one `actionId`, conflicts taken as truth — converging every
+> hand of 1,000 through a network that drops, duplicates and restarts. Four units are still empty
+> shells, each already policed. **C1 — the table on screen — is next.**
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -81,7 +83,7 @@ nowhere to come from.
 
 ### Packages
 
-All thirteen exist since **S0**; the eight marked ✅ are written, the rest are empty shells — a
+All thirteen exist since **S0**; the nine marked ✅ are written, the rest are empty shells — a
 `src/index.ts` naming its block, a build to `dist/`, and the dependency rules already applied. The
 right-hand column is the block that fills each.
 
@@ -93,7 +95,7 @@ right-hand column is the block that fills each.
 | `packages/fair` | SHA-256 and HMAC-SHA256 in plain TypeScript (a key's inner and outer states computed once, so each HMAC is two compressions), `commit`, `wordStream`, `below` (rejection), `shuffleInPlace`, `shoe(serverSeed, clientSeed)` — 85 µs a shoe. **Isomorphic**: the same suite passes in Node and happy-dom | ✅ S1 |
 | `packages/engine` | the round machine — deal, insurance, peek, decisions, dealer play, settlement, `allowed`. `step(state, command, shoe) → { state, events }` with refusals as values; `view(state)` the only door to the wire (the hole card and server seed stay behind it); `replay(…)` for the verifier and the server's resume. Pure | ✅ S2 |
 | `packages/strategy` | basic strategy for the published rules, as a table (`ROWS`: hard, soft, pairs × ten up cards), and `recommend(hand, upcard, allowed)` — always one of `allowed`, falling back as a player would (double → hit, or stand on a soft 18; a split refused at four hands → the pair's total). Insurance never. Pure | ✅ S4 |
-| `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM** | C0 |
+| `packages/client-core` | HTTP transport, session, the truth store, `actionId` + `seq` discipline, retry, resync. **No DOM**: `fetch`, timers, randomness and storage are handed in, so the browser, the load tool and the tests run the same code. `subscribe` gives every replacement of the truth as `(previous, events, next)`; dev mode asserts `fold(previous, events) == next` on every reply | ✅ C0 |
 | `packages/director` | `(previous snapshot, events, pace) → Beat[]` — the choreography as data. Pure, **no Pixi, no GSAP** | C1 |
 | `packages/renderer` | the table: Pixi v8 scene, generated card atlas, GSAP timelines on the Pixi ticker, plays `Beat[]`. **No protocol** | C1 |
 | `apps/server` | Fastify — sessions, wallets, rounds, seeds, idempotency, SQLite persistence, `/fair`. `Table` (no HTTP in it) does the work; `http.ts` is a line per route and, in development, parses every reply against its wire schema before it leaves. Boots refusing every dev convenience in production | ✅ S3 |
@@ -144,6 +146,10 @@ Hard rules on top of the graph:
 - **`engine` takes the shoe as an argument** and does not import `fair` (`engine-deps`). The engine
   deals from an array; where the array came from is the server's business and the verifier's.
 - **The load tool plays over the wire** (`load-deps`): `client-core`, never the engine.
+- **`client-core`'s tests may build a fake server from the real engine** (`client-core-test-deps`):
+  `*.test.ts` and `src/__fixtures__/` may also reach `engine`, `fair` and `cards`, so the client is
+  tested against the real rules rather than a second copy of them; what it ships stays on
+  `protocol` + `money` (`client-core-deps`). Both proven by fixtures.
 - **No React anywhere** (`no-react`).
 - **Nothing imports `apps/*`** (`nothing-imports-apps`).
 - **No package may import from `../slots` or `../crash`** (`no-siblings`) — by relative path or by

@@ -13,6 +13,9 @@ const WORKSPACE = '^(\\.\\./)*((packages|apps|tools)/[^/]+/|@blackjack/[^/]+$)';
 const only = (...names) =>
   `^(\\.\\./)*((packages|apps|tools)/(${names.join('|')})/|@blackjack/(${names.join('|')})$)`;
 
+/** Test code: a `*.test.ts` file, or anything under a `__fixtures__/` directory. */
+const TEST_CODE = '(\\.test\\.ts$|/__fixtures__/)';
+
 const list = (names) => names.map((n) => `@blackjack/${n}`).join(', ') || '(nothing)';
 
 /**
@@ -48,7 +51,21 @@ module.exports = {
      */
     mayOnlyDependOn('packages', 'engine', 'protocol', 'money', 'cards'),
     mayOnlyDependOn('packages', 'strategy', 'cards'),
-    mayOnlyDependOn('packages', 'client-core', 'protocol', 'money'),
+    /**
+     * What `client-core` ships may reach only the contract and money. Its tests drive it against a
+     * fake server built from the real engine and shuffle — the client tested against the real
+     * rules, not against a second implementation of them written for a test — so test code alone
+     * gets the wider list.
+     */
+    {
+      ...mayOnlyDependOn('packages', 'client-core', 'protocol', 'money'),
+      from: { path: '^packages/client-core/src/', pathNot: TEST_CODE },
+    },
+    {
+      ...mayOnlyDependOn('packages', 'client-core', 'protocol', 'money', 'engine', 'fair', 'cards'),
+      name: 'client-core-test-deps',
+      from: { path: '^packages/client-core/src/(__fixtures__/|[^/]+\\.test\\.ts$)' },
+    },
     mayOnlyDependOn('packages', 'director', 'protocol', 'money', 'cards'),
     /**
      * `renderer` plays beats and does not know what a reply is — the seam that lets the table be

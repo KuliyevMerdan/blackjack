@@ -22,6 +22,9 @@ nothing on its own; these are the other half.
 | `packages/engine/src/legal.ts` | the engine's whole allow-list is *not* flagged | `.dependency-cruiser.cjs` |
 | `packages/fair/src/illegal-{slots,crash}-{package,path}.ts` | nothing from `../slots` or `../crash`, by package name or relative path | `.dependency-cruiser.cjs` |
 | `packages/client-core/src/illegal-react.ts` | there is no React in this repository | `.dependency-cruiser.cjs` |
+| `packages/client-core/src/illegal-engine.ts` | the client holds the truth; what it ships never runs the rules | `.dependency-cruiser.cjs` |
+| `packages/client-core/src/__fixtures__/legal-server.ts` | its *test code* may build a fake server from the engine and the shuffle | `.dependency-cruiser.cjs` |
+| `packages/client-core/src/__fixtures__/illegal-renderer.ts` | even its test code stays off the stage | `.dependency-cruiser.cjs` |
 | `apps/server/src/illegal-web.ts` | nothing imports an app | `.dependency-cruiser.cjs` |
 | `tools/sim/src/illegal-server.ts` | the sim measures the engine, not the server | `.dependency-cruiser.cjs` |
 | `tools/load/src/illegal-engine.ts` | the load tool plays over the wire, as a client does | `.dependency-cruiser.cjs` |

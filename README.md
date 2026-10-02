@@ -5,11 +5,11 @@ and split to four hands until the dealer plays. Node + TypeScript on the server,
 browser, one HTTP request per decision.
 
 > ⚠️ **Status (2026-10-02): the table serves and is measured; nothing draws it yet.** **S0–S4**
-> have landed — the workspace and its boundaries, the contracts, the round machine, the server
-> (proven over 1,000 hands with two tabs, lost replies and restarts), and basic strategy with a
-> simulator: 3·10⁷ rounds through the engine against the published 0.406 % house edge
-> ([`docs/sim/`](docs/sim/README.md)). See [`ROADMAP.md`](ROADMAP.md) — **C0**, the client core,
-> is next.
+> and **C0** have landed — the workspace and its boundaries, the contracts, the round machine, the
+> server (proven over 1,000 hands with two tabs, lost replies and restarts), basic strategy with a
+> simulator (3·10⁷ rounds against the published 0.406 % house edge, [`docs/sim/`](docs/sim/README.md)),
+> and the client core that holds the truth through a hostile network. See
+> [`ROADMAP.md`](ROADMAP.md) — **C1**, the table on screen, is next.
 
 ## What makes it interesting to build
 

@@ -30,7 +30,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **S2** | `engine` — the round machine, pure and headless | S1 | ✅ (landed 2026-10-02) |
 | **S3** | `apps/server` — sessions, wallets, seeds, idempotency, persistence, `/fair` | S2 | ✅ (landed 2026-10-02) |
 | **S4** | `strategy` + `tools/sim` — basic strategy and the realised house edge | S2 | ✅ (landed 2026-10-02) |
-| **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ☐ |
+| **C0** | `client-core` — transport, the truth store, `actionId` + `seq`, retry, resync | S1, S3 | ✅ (landed 2026-10-02) |
 | **C1** | The table on screen — Pixi scene, card atlas, `director`, the deal and the dealer's play | C0 | ☐ |
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ☐ |
 | **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ☐ |
@@ -234,26 +234,36 @@ figure, and a test pins a smaller run's result for a fixed seed. ✅ 2,000 round
 
 _2 days. **No DOM in this package.**_
 
-- [ ] Transport: `fetch` with timeouts, every reply parsed by schema, errors mapped to the four
-      classes.
-- [ ] The truth store: snapshot, balance, commit, config — replaced wholesale by every reply, with a
-      typed change stream out carrying `(previous, events, next)`.
-- [ ] `actionId` per intent, reused across retries; `seq` from the snapshot the decision was made
-      on; one action in flight at a time, so a double tap is one request.
-- [ ] Retry: `SYSTEM` and network failures retried with backoff under the same `actionId`; a lost
+- [x] Transport: `fetch` with timeouts, every reply parsed by schema, errors mapped to the four
+      classes. **Diverged:** `fetch`, `sleep`, randomness, UUIDs and storage are *handed in* — the
+      package compiles with no DOM lib and no Node types, so it cannot name them, and the browser,
+      the load tool and the tests each pass their own. A reply that misses its timeout is a lost
+      reply; a 5xx that is not our error shape (a proxy's page) is retried like `SYSTEM`.
+- [x] The truth store: snapshot, balance, commit, config — replaced wholesale by every reply, with a
+      typed change stream out carrying `(previous, events, next)`. Resume, resync and conflicts
+      carry no events: they are rendered as they stand.
+- [x] `actionId` per intent, reused across retries; `seq` from the snapshot the decision was made
+      on; one action in flight at a time, so a double tap is one request — the second is `busy`,
+      not queued. A decision outside `allowed` is not sent at all (`unavailable`).
+- [x] Retry: `SYSTEM` and network failures retried with backoff under the same `actionId`; a lost
       reply recovered by the retry, not by a guess. `CONFLICT` replaces the truth with the attached
-      state and never retries.
-- [ ] Seeds: a fresh client seed per round by default, a typed one kept until changed;
+      state and never retries. Equal-jitter backoff, 250 ms doubling to 4 s, six attempts; then
+      `failed` with the truth unchanged. `SESSION` opens a new session and says so (`sessionLost`).
+- [x] Seeds: a fresh client seed per round by default, a typed one kept until changed;
       `COMMIT_MISMATCH` draws a new seed before re-sending (protocol invariant 8). Every round's
-      commit and client seed remembered locally for the verifier.
-- [ ] Resume: session open returns the open round, rendered as it stands.
-- [ ] Tests against a fake server: every error class · a reply lost after the server applied it ·
+      commit and client seed remembered locally for the verifier. A typed seed is not re-sent on its
+      own: the deal comes back `commitMoved`, and the player's next press is the confirmation.
+- [x] Resume: session open returns the open round, rendered as it stands.
+- [x] Tests against a fake server: every error class · a reply lost after the server applied it ·
       two tabs on one hand · a server restart between commit and deal · `fold(previous, events) ==
-      next` asserted in dev on every reply.
+      next` asserted in dev on every reply. The fake server is the protocol's routes and order of
+      checks over the **real engine and shuffle** — a new boundary rule lets `client-core`'s test
+      code, and only it, reach them. Four mutations — no in-flight guard, no retry after a lost
+      reply, a conflict's round ignored, no fold assertion — each turn a suite red.
 
 **Done when:** a headless test drives 1,000 hands through a fake server that drops one reply in ten,
 duplicates one in twenty and restarts every hundred, and every hand ends with the client's truth
-equal to the server's.
+equal to the server's. ✅ seeded, ≈1 s.
 
 ## Block C1 — The table on screen
 

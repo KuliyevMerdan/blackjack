@@ -179,6 +179,15 @@ importers:
         specifier: workspace:*
         version: link:../protocol
     devDependencies:
+      '@blackjack/cards':
+        specifier: workspace:*
+        version: link:../cards
+      '@blackjack/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@blackjack/fair':
+        specifier: workspace:*
+        version: link:../fair
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
