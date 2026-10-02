@@ -35,7 +35,7 @@ the same shoe in Node and a DOM, and a schema for everything on the wire.
 | **C2** | Decisions — action bar, insurance, double, split to four hands, optimism and rollback, skip and turbo | C1 | ✅ (landed 2026-10-02) |
 | **C3** | History, the verification page, the strategy hint | C2, S3, S4 | ✅ (landed 2026-10-02) |
 | **P0** | Hardening — lost replies, two tabs, restarts, load, a network lab | C2, S3 | ✅ (landed 2026-10-02) |
-| **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ◐ |
+| **P1** | Packaging — deploy, README, Playwright E2E in CI | C3, P0, S4 | ✅ (landed 2026-10-03) |
 
 **Legend:** ☐ not started · ◐ in progress · ✅ landed (add the date, as `✅ (landed 2026-10-04)`).
 
@@ -499,7 +499,7 @@ _1–2 days._
       The host is Render's free tier, decided in [ADR-0003](docs/adr/ADR-0003-demo-host.md): no
       disk, so every boot is a fresh table — and why nothing a browser kept from before a sleep
       breaks. `render.yaml` deploys only commits CI passed.
-- [ ] **The live service** — the Blueprint connected on Render, and its URL.
+- [x] **The live service** (2026-10-03) — <https://blackjack-demo.onrender.com/>, the Blueprint on Render's free tier.
 - [x] **Playwright E2E in CI** (2026-10-02), on an upright phone. `forced.spec`: three splits into
       four hands, a double on 11, the dealer drawing to 25 — "Hand 1: 21, win, €20.00 back" and
       the three €10.00 ones, "Staked €25.00 · returned €50.00", the balance €25 up; then the
@@ -516,7 +516,7 @@ _1–2 days._
       shareable for as long as the boot that dealt it lasts (ADR-0003).
 - [x] **`docs/architecture.md`** (2026-10-02) — the request path as a sequence, the one transaction
       and why a kill at any instant leaves no third state, truth · script · stage as one diagram.
-- [ ] The workspace README's row for this project: its status and the live demo link.
+- [x] The workspace README's row for this project: its status and the live demo link (2026-10-03).
 
 Found on the way, and fixed in this block:
 
@@ -539,3 +539,10 @@ Found on the way, and fixed in this block:
 **Done when:** a stranger can open the live link, play a hand with a split, break the network from
 the lab mid-hand, watch it recover with nothing lost, and verify the hand they just played — in
 under two minutes.
+
+**Measured (2026-10-03):** `E2E_BASE_URL=https://blackjack-demo.onrender.com pnpm e2e:live`, three
+runs against the live demo — each a fresh browser that deals until a pair (on hands 2, 3 and 4),
+splits, goes offline mid-hand until the client gives up and comes back Online by itself, loses the
+next reply and lands the move once, and verifies the hand: four ✓, the replay exactly the moves
+pressed. Open → verified in **28.6 s, 37.7 s and 37.6 s**. The one thing P1 could not measure is a
+real phone (CLAUDE.md § Gaps): it needs one in hand.

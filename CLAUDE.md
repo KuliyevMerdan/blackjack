@@ -5,7 +5,7 @@ repository.
 
 ## Project status
 
-> ⚠️ **The game is whole, hardened and packaged — one image, E2E in CI; the live link is next.**
+> ⚠️ **Every block has landed. The demo is live: <https://blackjack-demo.onrender.com/>.**
 > **S0 landed 2026-10-02**: the pnpm + Turborepo workspace, strict TypeScript, the dependency graph
 > and the purity rules enforced and *proven to fire* against deliberately illegal fixtures, and CI
 > running `pnpm check`. **S1 landed 2026-10-02**: the four packages everything reads — `money`
@@ -34,12 +34,13 @@ repository.
 > the rules read from the config onto the felt. **P0 landed 2026-10-02**: hardening — faults
 > injected per session (a lost reply after the move applied, refusals, latency) and a network lab to
 > drive them; two tabs kept in step; a hidden tab drawn as it stands; and a 200-session, 30-minute
-> soak with faults on and the server SIGKILLed under it, audited over the wire. **P1 — packaging —
-> is in progress**: one Docker image serving the API and the page from one origin, a Render
-> Blueprint ([ADR-0003](docs/adr/ADR-0003-demo-host.md): no disk, a fresh table each boot),
-> Playwright E2E in CI — a forced four-hand split paid to the cent, and a stranger who splits,
-> breaks the network and verifies, against the built image too — the README with its GIF, and
-> [`docs/architecture.md`](docs/architecture.md). Waiting on the Render service and the live link.
+> soak with faults on and the server SIGKILLed under it, audited over the wire. **P1 — packaging**:
+> one Docker image serving the API and the page from one origin, a Render Blueprint
+> ([ADR-0003](docs/adr/ADR-0003-demo-host.md): no disk, a fresh table each boot), Playwright E2E in
+> CI — a forced four-hand split paid to the cent, and a stranger who splits, breaks the network and
+> verifies, against the built image too — the README with its GIF, and
+> [`docs/architecture.md`](docs/architecture.md). **Landed 2026-10-03**: a stranger on the live link
+> splits, breaks the network, recovers and verifies in 29–38 s.
 >
 > The canon is four documents: `CLAUDE.md` (this file), [`ROADMAP.md`](ROADMAP.md) (the task map),
 > [`docs/protocol.md`](docs/protocol.md) (the wire contract) and [`docs/adr/`](docs/adr) (the
@@ -327,7 +328,7 @@ writing:
   WebGL falls back to SwiftShader, rAF runs at 30 Hz idle or not, and native GL stalls show up as
   50–90 ms long tasks with almost no JS in them; it measures the machine, not the table. A real
   device, through remote debugging against the live link, needs a phone in hand, which no script in
-  this repository can stand in for. **P1**, once the live link is up.
+  this repository can stand in for. Open after P1 — the live link is up; the measurement is not.
 
 ## Rules
 

@@ -4,9 +4,9 @@ A **single-player blackjack table** — stake, deal, insurance under an ace, the
 and split to four hands until the dealer plays. Node + TypeScript on the server, PixiJS + GSAP in the
 browser, one HTTP request per decision.
 
-**Live demo: being connected on Render** ([`render.yaml`](render.yaml)) — until then, `pnpm dev` or
-the Docker image below. Free hosting: the first visit after a quiet spell will take about a minute
-to wake the server, and every wake is a fresh table ([ADR-0003](docs/adr/ADR-0003-demo-host.md)).
+**▶ [Play the live demo](https://blackjack-demo.onrender.com/)** — play money, on a phone or a desktop. Free hosting: the first
+visit after a quiet spell takes about a minute to wake the server, and every wake is a fresh table
+([ADR-0003](docs/adr/ADR-0003-demo-host.md)).
 
 ![A pair of eights split into four hands, one doubled, the dealer busting on 25 — every hand paid](docs/media/table.gif)
 
