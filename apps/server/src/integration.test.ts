@@ -23,7 +23,12 @@ import { sqliteStore } from './store/sqlite.js';
 
 const HANDS = 1_000;
 const STARTING = 10_000_000;
-const RESTART_AT = new Set([333, 666]);
+/**
+ * Restart at the first hand from each of these that is still open after its deal. Not at exactly
+ * these hands: the server's seeds are real CSPRNG draws, and a blackjack settles a round in its
+ * deal reply about one time in ten, which would skip the restart (it did, once, in CI).
+ */
+const RESTART_FROM = [333, 666];
 
 const dir = mkdtempSync(path.join(tmpdir(), 'bj-integration-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -61,7 +66,8 @@ describe('two tabs, lost replies and restarts, over HTTP', () => {
       if (dealt.ok) stats.dealt += 1;
       const roundId = dealer.round?.roundId ?? '';
 
-      if (RESTART_AT.has(hand) && dealer.round?.phase !== 'SETTLED') {
+      const due = RESTART_FROM.filter((from) => hand >= from).length > stats.restarts;
+      if (due && dealer.round?.phase !== 'SETTLED') {
         await running.server.close();
         running = build(config, sqliteStore(file));
         base = await running.server.listen();
